@@ -1,6 +1,12 @@
 #powershell "(New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/DarrenWhite99/LabTech-Powershell-Module/DarrenWhite99-P2-Testing/LabTech.psm1') | iex -verbose;(New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/DarrenWhite99/LabTech-Powershell-Module/TestScript/ExerciseFunctions.ps1') | iex -verbose"
 #https://raw.githubusercontent.com/DarrenWhite99/LabTech-Powershell-Module/master/LabTech.psm1
 
+$DebugPreference='Continue'
+$ErrorActionPreference='Continue'
+$InformationPreference='Continue'
+$VerbosePreference='Continue'
+$WarningPreference='Continue'
+
 'Running Test-LTPorts -Quiet'
 try {Test-LTPorts -Quiet}
 catch {'Error running Test-Ports -Quiet'; $($Error[0])}
@@ -46,9 +52,9 @@ if (!($BackupSettings)) {
   try { $BackupSettings | Reinstall-LTService 
 
     'Reinstall Succeeded. Testing Uninstall/Reinstall individually.'
-    'Running Get-LTServiceInfo | Uninstall-LTServer'
-    try { Get-LTServiceInfo | Uninstall-LTServer }
-    catch {'Error running Get-LTServiceInfo | Uninstall-LTServer'; $($Error[0])}
+    'Running Get-LTServiceInfo | Uninstall-LTService'
+    try { Get-LTServiceInfo | Uninstall-LTService }
+    catch {'Error running Get-LTServiceInfo | Uninstall-LTService'; $($Error[0])}
 
     'Running $BackupSettings | Install-LTService'
     try { $BackupSettings | Install-LTService }
@@ -56,8 +62,7 @@ if (!($BackupSettings)) {
 
     if ($(Get-LTServiceInfo|Get-Member|Select-Object -Expand Name) -contains ('ID','Server Address','LocationID','MAC')) {
       'Running Get-LTServiceInfo | Install-LTService on top of existing install.'
-      try { Get-LTServiceInfo  | Install-LTService }
-      catch {'Error running Get-LTServiceInfo  | Install-LTService'; $($Error[0])}
+      Get-LTServiceInfo  | Install-LTService -ErrorAction Continue
     }
 
   }
