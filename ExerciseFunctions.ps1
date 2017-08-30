@@ -38,11 +38,30 @@ try {Start-LTService}
 catch {'Error running Start-LTService'; $($Error[0])}
 
 if (!($BackupSettings)) {
-'Running Reinstall-LTService'
-try {Reinstall-LTService}
-catch {'Error running Reinstall-LTService'; $($Error[0])}
+  'Running Reinstall-LTService'
+  try {Reinstall-LTService}
+  catch {'Error running Reinstall-LTService'; $($Error[0])}
 } else {
-'Running $BackupSettings | Reinstall-LTService'
-try { $BackupSettings | Reinstall-LTService }
-catch {'Error running $BackupSettings | Reinstall-LTService'; $($Error[0])}
+  'Running $BackupSettings | Reinstall-LTService'
+  try { $BackupSettings | Reinstall-LTService 
+
+    'Reinstall Succeeded. Testing Uninstall/Reinstall individually.'
+    'Running Get-LTServiceInfo | Uninstall-LTServer'
+    try { Get-LTServiceInfo | Uninstall-LTServer }
+    catch {'Error running Get-LTServiceInfo | Uninstall-LTServer'; $($Error[0])}
+
+    'Running $BackupSettings | Install-LTService'
+    try { $BackupSettings | Install-LTService }
+    catch {'Error running $BackupSettings | Install-LTService'; $($Error[0])}
+
+    if ($(Get-LTServiceInfo|Get-Member|Select-Object -Expand Name) -contains ('ID','Server Address','LocationID','MAC')) {
+      'Running Get-LTServiceInfo | Install-LTService on top of existing install.'
+      try { Get-LTServiceInfo  | Install-LTService }
+      catch {'Error running Get-LTServiceInfo  | Install-LTService'; $($Error[0])}
+    }
+
+  }
+  catch {'Error running $BackupSettings | Reinstall-LTService'; $($Error[0])}
 }
+
+
