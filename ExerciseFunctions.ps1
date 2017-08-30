@@ -56,6 +56,7 @@ if (!($BackupSettings)) {
     try { Get-LTServiceInfo | Uninstall-LTService }
     catch {'Error running Get-LTServiceInfo | Uninstall-LTService'; $($Error[0])}
 
+    Start-Sleep 10 
     'Running $BackupSettings | Install-LTService'
     try { $BackupSettings | Install-LTService }
     catch {'Error running $BackupSettings | Install-LTService'; $($Error[0])}
