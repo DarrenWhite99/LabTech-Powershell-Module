@@ -60,7 +60,7 @@ if (!($BackupSettings)) {
     try { $BackupSettings | Install-LTService }
     catch {'Error running $BackupSettings | Install-LTService'; $($Error[0])}
 
-    if ($(Get-LTServiceInfo|Get-Member|Select-Object -Expand Name) -contains ('ID','Server Address','LocationID','MAC')) {
+    if ($(Get-LTServiceInfo -EA 0 |Get-Member -EA 0|Select-Object -Expand Name -EA 0) -contains ('ID','Server Address','LocationID','MAC')) {
       'Running Get-LTServiceInfo | Install-LTService on top of existing install.'
       Get-LTServiceInfo  | Install-LTService -ErrorAction Continue
     }
