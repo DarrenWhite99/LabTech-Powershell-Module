@@ -62,7 +62,11 @@ if (!($BackupSettings)) {
 
     if ($(Get-LTServiceInfo -EA 0 |Get-Member -EA 0|Select-Object -Expand Name -EA 0) -contains ('ID','Server Address','LocationID','MAC')) {
       'Running Get-LTServiceInfo | Install-LTService on top of existing install.'
-      Get-LTServiceInfo  | Install-LTService -ErrorAction Continue
+      net.exe stop ltsvcmon
+      net.exe stop ltservice
+      sc.exe delete ltsvcmon
+      sc.exe delete ltservice
+      Get-LTServiceInfo  | Install-LTService
     }
 
   }
