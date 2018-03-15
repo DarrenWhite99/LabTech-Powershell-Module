@@ -19,7 +19,7 @@ $WarningPreference='Continue'
 'Whatif Running Start-LTService'; try {Start-LTService -WhatIf} catch {'Error running Start-LTService'; $($Error[0])}
 'Whatif Running Reinstall-LTService'; try {Reinstall-LTService -WhatIf} catch {'Error running Reinstall-LTService'; $($Error[0])}
 'Whatif Running Get-LTServiceInfo | Uninstall-LTService'; try { Get-LTServiceInfo | Uninstall-LTService -WhatIf} catch {'Error running Get-LTServiceInfo | Uninstall-LTService'; $($Error[0])}
-'Whatif Running $BackupSettings | Install-LTService'; try { Get-LTServiceInfo | Install-LTService -WhatIf} catch {'Error running Get-LTServiceInfo | Install-LTService'; $($Error[0])}
+'Whatif Running Get-LTServiceInfo | Install-LTService'; try { Get-LTServiceInfo | Install-LTService -WhatIf} catch {'Error running Get-LTServiceInfo | Install-LTService'; $($Error[0])}
 
 'Done with -WhatIf tests.. Moving on to LIVE tests. Observing 30 seconds of silence.'
 Start-Sleep 30
