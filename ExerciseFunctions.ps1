@@ -8,14 +8,13 @@ $VerbosePreference='Continue'
 $WarningPreference='Continue'
 
 'Running "WhatIf" tests'
-'Running Test-LTPorts'
-try {Test-LTPorts -WhatIf} catch {'Error running Test-LTPorts'; $($Error[0])}
-
-'Testing Get-LTServiceInfo'; try {Get-LTServiceInfo -WhatIf} catch {'Error'; $($Error[0])}
+'Running Test-LTPorts'; try {Test-LTPorts -WhatIf} catch {'Error running Test-LTPorts'; $($Error[0])}
 'Testing Get-LTServiceSettings'; try { Get-LTServiceSettings -WhatIf} catch {'Error'; $($Error[0])}
 'Testing New-LTServiceBackup'; try {New-LTServiceBackup -WhatIf} catch {'Error'; $($Error[0])}
-'Running Restart-LTService'; try {Restart-LTService - WhatIf} catch {'Error'; $($Error[0])}
 'Checking LT Backup Settings'; try {Get-LTServiceInfoBackup -WhatIf} catch {'Error'; $($Error[0])}
+
+'Testing Get-LTServiceInfo'; try {Get-LTServiceInfo -WhatIf} catch {'Error'; $($Error[0])}
+'Running Restart-LTService'; try {Restart-LTService -WhatIf} catch {'Error'; $($Error[0])}
 'Running Stop-LTService'; try {Stop-LTService -WhatIf} catch {'Error running Stop-LTService'; $($Error[0])}
 'Running Start-LTService'; try {Start-LTService -WhatIf} catch {'Error running Start-LTService'; $($Error[0])}
 'Running Reinstall-LTService'; try {Reinstall-LTService -WhatIf} catch {'Error running Reinstall-LTService'; $($Error[0])}
