@@ -78,7 +78,9 @@ if (!($BackupSettings)) {
     try { $BackupSettings | Install-LTService }
     catch {'Error running $BackupSettings | Install-LTService'; $($Error[0])}
 
-    if ($(Get-LTServiceInfo -EA 0 |Get-Member -EA 0|Select-Object -Expand Name -EA 0) -contains ('ID','Server Address','LocationID','MAC')) {
+    $AllFound=$True; $LTSI=(Get-LTServiceInfo -EA 0 |Get-Member -EA 0|Select-Object -Expand Name -EA 0)
+    @('ID','Server Address','LocationID','MAC') | ForEach-Object {if ($LTSI -notcontains $_) {$AllFound=$False}}
+    if ($AllFound -eq $True) {
       'Running Get-LTServiceInfo | Install-LTService on top of existing install.'
       net.exe stop ltsvcmon
       net.exe stop ltservice
