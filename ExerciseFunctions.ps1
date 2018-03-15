@@ -54,7 +54,7 @@ catch {}
 if (!($BackupSettings)) {'Error - Could not get BackupSettings'} else {$BackupSettings}
 
 'Running Stop-LTService'
-try {Stop-LTService; Sleep 5}
+try {Stop-LTService; Start-Sleep 5}
 catch {'Error running Stop-LTService'; $($Error[0])}
 
 'Running Start-LTService'
