@@ -95,14 +95,16 @@ Function Get-LTServiceInfo{
         Clear-Variable key,BasePath,exclude,Servers -EA 0 -WhatIf:$False -Confirm:$False #Clearing Variables for use
         Write-Debug "Starting $($myInvocation.InvocationName)"
 
-        if ((Test-Path 'HKLM:\SOFTWARE\LabTech\Service') -eq $False){
-            Write-Error "ERROR: Unable to find information on LTSvc. Make sure the agent is installed." -ErrorAction Stop
-        }
         $exclude = "PSParentPath","PSChildName","PSDrive","PSProvider","PSPath"
         $key = $Null
     }#End Begin
 
     Process{
+        if ((Test-Path 'HKLM:\SOFTWARE\LabTech\Service') -eq $False){
+            Write-Error "ERROR: Unable to find information on LTSvc. Make sure the agent is installed."
+            Return $Null
+        }
+
         If ($PSCmdlet.ShouldProcess("LTService", "Retrieving Service Registry Values")) {
             Write-Verbose "Checking for LT Service registry keys."
             Try{
@@ -123,16 +125,18 @@ Function Get-LTServiceInfo{
             }#End Try
             
             Catch{
-            Write-Error "ERROR: There was a problem reading the registry keys. $($Error[0])"
+                Write-Error "ERROR: There was a problem reading the registry keys. $($Error[0])"
             }#End Catch
         }#End If
     }#End Process
 
     End{
-        if ($?){
-            $key
-        }    
-        Write-Debug "Exiting $($myInvocation.InvocationName)"
+        If ($?){
+            Write-Debug "Exiting $($myInvocation.InvocationName)"
+            return $key
+        } Else {
+            Write-Debug "Exiting $($myInvocation.InvocationName)"
+        }
     }#End End
 }#End Function Get-LTServiceInfo
 #endregion Get-LTServiceInfo
@@ -1161,6 +1165,7 @@ Function Install-LTService{
                     Write-Host ""
                     $sw.Stop()
                     Write-Verbose "Completed wait for LabTech Installation after $(([int32]$sw.Elapsed.TotalSeconds).ToString()) seconds."
+                    $Null=Get-LTProxy -ErrorAction Continue
                 }#End If
                 If ($Hide) {Hide-LTAddRemove}
             }#End Try
@@ -1291,20 +1296,29 @@ Function Redo-LTService{
         Write-Debug "Starting $($myInvocation.InvocationName)"
 
         # Gather install stats from registry or backed up settings
-        $Settings = Get-LTServiceInfo -EA 0 -Verbose:$False -WhatIf:$False -Confirm:$False -Debug:$False
-        If (($Settings) -and ($Settings|Select-Object -Expand Probe -EA 0) -eq '1') {
-            If ($Force -eq $True) {
-                Write-Output "Probe Agent Detected. Re-Install Forced."
-            } Else {
-                If ($WhatIfPreference -ne $True) {
-                    Write-Error -Exception [System.OperationCanceledException]"Probe Agent Detected. Re-Install Denied." -ErrorAction Stop
-                } Else {
-                    Write-Error -Exception [System.OperationCanceledException]"What If: Stopping: Probe Agent Detected. Re-Install Denied." -ErrorAction Stop
+        Try {
+            $Settings = Get-LTServiceInfo -EA 0 -Verbose:$False -WhatIf:$False -Confirm:$False
+            If (($Settings) -ne $Null) {
+                If (($Settings|Select-Object -Expand Probe -EA 0) -eq '1') {
+                    If ($Force -eq $True) {
+                        Write-Output "Probe Agent Detected. Re-Install Forced."
+                    } Else {
+                        If ($WhatIfPreference -ne $True) {
+                            Write-Error -Exception [System.OperationCanceledException]"Probe Agent Detected. Re-Install Denied." -ErrorAction Stop
+                        } Else {
+                            Write-Error -Exception [System.OperationCanceledException]"What If: Stopping: Probe Agent Detected. Re-Install Denied." -ErrorAction Stop
+                        }#End If
+                    }#End If
                 }#End If
             }#End If
-        }#End If
-        if (-not ($Settings)){
-            $Settings = Get-LTServiceInfoBackup -ErrorAction SilentlyContinue
+        } Catch {
+            Write-Debug "Failed to retrieve current Agent Settings."        
+        }#End Catch
+        If (($Settings) -eq $Null) {
+            Write-Debug "Unable to retrieve current Agent Settings. Testing for Backup Settings"
+            Try {
+                $Settings = Get-LTServiceInfoBackup -EA 0
+            } Catch {}
         }
         $ServerList=@()
     }#End Begin
@@ -1359,7 +1373,10 @@ Function Redo-LTService{
         }#End Catch
 
         Finally{
-            If ($WhatIfPreference -ne $True) {Start-Sleep 10}
+            If ($WhatIfPreference -ne $True) {
+                Write-Verbose "Waiting 20 seconds for prior uninstall to settle before starting Install."
+                Start-Sleep 20
+            }
         }
 
         Write-Verbose "Starting: Install-LTService -Server $($ServerList -join ',') $PasswordArg -LocationID $LocationID -Hide:`$$($Hide) $RenameArg"
@@ -1372,6 +1389,7 @@ Function Redo-LTService{
         }#End Catch
 
         If ($?){
+            Write-Debug "Exiting $($myInvocation.InvocationName)"
             Return
         }
         Else {
@@ -1398,7 +1416,7 @@ Function Get-LTError{
     Open the log file in a sortable searchable window.
 
 .NOTES
-    Version:        1.1
+    Version:        1.2
     Author:         Chris Taylor
     Website:        labtechconsulting.com
     Creation Date:  3/14/2016
@@ -1406,7 +1424,10 @@ Function Get-LTError{
 
     Update Date: 6/1/2017
     Purpose/Change: Updates for better overall compatibility, including better support for PowerShell V2
-    
+
+    Update Date: 3/18/2018
+    Purpose/Change: Changed Erroraction from Stop to unspecified to allow caller to set the ErrorAction.
+
 .LINK
     http://labtechconsulting.com
 #> 
@@ -1416,12 +1437,13 @@ Function Get-LTError{
     Begin{
         $BasePath = $(Get-LTServiceInfo -EA 0 -Verbose:$False -WhatIf:$False -Confirm:$False -Debug:$False|Select-object -Expand BasePath -EA 0)
         if (!$BasePath){$BasePath = "$env:windir\LTSVC"}
-        if ($(Test-Path -Path $BasePath\LTErrors.txt) -eq $False) {
-            Write-Error "ERROR: Unable to find log. $($Error[0])" -ErrorAction Stop
-        }
     }#End Begin
 
     Process{
+        if ($(Test-Path -Path $BasePath\LTErrors.txt) -eq $False) {
+            Write-Error "ERROR: Unable to find log. $($Error[0])"
+            return
+        }
         Try{
             $errors = Get-Content "$BasePath\LTErrors.txt"
             $errors = $errors -join ' ' -split ':::'
@@ -1439,7 +1461,7 @@ Function Get-LTError{
         }#End Try
     
         Catch{
-            Write-Error "ERROR: There was an error reading the log. $($Error[0])" -ErrorAction Stop
+            Write-Error "ERROR: There was an error reading the log. $($Error[0])"
         }#End Catch
     }#End Process
   
@@ -1447,7 +1469,6 @@ Function Get-LTError{
         if ($?){
         }
         Else {$Error[0]}
-        
     }#End End
 }#End Function Get-LTError
 #endregion Get-LTError
@@ -1574,7 +1595,7 @@ Function Reset-LTService{
 
     End{
         If ($?){
-            If ($!($NoWait) -and $PSCmdlet.ShouldProcess("LTService", "Discover new settings after Service Start")) {
+            If (-NOT $NoWait -and $PSCmdlet.ShouldProcess("LTService", "Discover new settings after Service Start")) {
                 $timeout = New-Timespan -Minutes 1
                 $sw = [diagnostics.stopwatch]::StartNew()
                 $LTSI=Get-LTServiceInfo -EA 0 -Verbose:$False -WhatIf:$False -Confirm:$False -Debug:$False
@@ -1998,7 +2019,7 @@ Function Get-LTLogging{
 #region [Get-LTLogging]---------------------------------------------------- ----
 <#
 .SYNOPSIS
-    This function will pull the logging level of the LabTech service.
+    This function will return the logging level of the LabTech service.
 
 .NOTES
     Version:        1.1
@@ -2009,7 +2030,10 @@ Function Get-LTLogging{
 
     Update Date: 6/1/2017
     Purpose/Change: Updates for better overall compatibility, including better support for PowerShell V2
-    
+
+    Update Date: 3/18/2018
+    Purpose/Change: Changed Erroraction from Stop to unspecified to allow caller to set the ErrorAction.
+
 .LINK
     http://labtechconsulting.com
 #> 
@@ -2018,9 +2042,6 @@ Function Get-LTLogging{
       
   Begin{
     Write-Verbose "Checking for registry keys."
-    if ((Test-Path 'HKLM:\SOFTWARE\LabTech\Service\Settings') -eq $False){
-        Write-Error "ERROR: Unable to find logging settings for LTSvc. Make sure the agent is installed." -ErrorAction Stop
-    }
   }#End Begin
   
   Process{
@@ -2029,7 +2050,8 @@ Function Get-LTLogging{
     }#End Try
     
     Catch{
-      Write-Error "ERROR: There was a problem reading the registry key. $($Error[0])" -ErrorAction Stop
+      Write-Error "ERROR: There was a problem reading the registry key. $($Error[0])"
+      return
     }#End Catch
   }#End Process
   
@@ -2042,7 +2064,7 @@ Function Get-LTLogging{
             Write-Output "Current logging level: Verbose"
         }
         else{
-            Write-Error "ERROR: Unknown Logging level $($value)" -ErrorAction Stop
+            Write-Error "ERROR: Unknown Logging level $($value)"
         }
     }    
   }#End End
@@ -2127,7 +2149,10 @@ Function Get-LTProbeErrors{
 
     Update Date: 6/1/2017
     Purpose/Change: Updates for better overall compatibility, including better support for PowerShell V2
-    
+
+    Update Date: 3/18/2018
+    Purpose/Change: Changed Erroraction from Stop to unspecified to allow caller to set the ErrorAction.
+
 .LINK
     http://labtechconsulting.com
 #> 
@@ -2137,22 +2162,23 @@ Function Get-LTProbeErrors{
     Begin{
         $BasePath = $(Get-LTServiceInfo -EA 0 -Verbose:$False -WhatIf:$False -Confirm:$False -Debug:$False|Select-object -Expand BasePath -EA 0)
         if (!($BasePath)){$BasePath = "$env:windir\LTSVC"}
-        if ($(Test-Path -Path $BasePath\LTProbeErrors.txt) -eq $False) {
-            Write-Error "ERROR: Unable to find log. $($Error[0])" -ErrorAction Stop
-        }
     }#End Begin
 
     Process{
+        if ($(Test-Path -Path $BasePath\LTProbeErrors.txt) -eq $False) {
+            Write-Error "ERROR: Unable to find log. $($Error[0])"
+            return
+        }
         $errors = Get-Content $BasePath\LTProbeErrors.txt
         $errors = $errors -join ' ' -split ':::'
-        foreach($Line in $Errors){
+        Foreach($Line in $Errors){
             $items = $Line -split "`t" -replace ' - ',''
             $object = New-Object -TypeName PSObject
             $object | Add-Member -MemberType NoteProperty -Name ServiceVersion -Value $items[0]
             $object | Add-Member -MemberType NoteProperty -Name Timestamp -Value $([datetime]$items[1])
             $object | Add-Member -MemberType NoteProperty -Name Message -Value $items[2]
             Write-Output $object
-        }
+        }#End Foreach
     }
 
     End{
@@ -2267,43 +2293,47 @@ Function Get-LTServiceInfoBackup{
 
     Update Date: 6/1/2017
     Purpose/Change: Updates for better overall compatibility, including better support for PowerShell V2
-    
+
+    Update Date: 3/18/2018
+    Purpose/Change: Changed Erroraction from Stop to unspecified to allow caller to set the ErrorAction.
+
 .LINK
     http://labtechconsulting.com
 #> 
     [CmdletBinding()]
     Param ()
-      
-  Begin{
-    Write-Verbose "Checking for registry keys."
-    If ((Test-Path 'HKLM:\SOFTWARE\LabTechBackup\Service') -eq $False){
-        Write-Error "ERROR: Unable to find backup information on LTSvc. Use New-LTServiceBackup to create a settings backup." -ErrorAction Stop
-    }
-    $exclude = "PSParentPath","PSChildName","PSDrive","PSProvider","PSPath"
-  }#End Begin
-  
-  Process{
-    Try{
-        $key = Get-ItemProperty HKLM:\SOFTWARE\LabTechBackup\Service -ErrorAction Stop | Select-Object * -exclude $exclude
-        If (($key) -ne $Null -and ($key|Get-Member|Where-Object {$_.Name -match 'BasePath'})) {
-            $key.BasePath = [System.Environment]::ExpandEnvironmentVariables($key.BasePath)
+
+    Begin{
+        Write-Verbose "Checking for registry keys."
+        $exclude = "PSParentPath","PSChildName","PSDrive","PSProvider","PSPath"
+    }#End Begin
+
+    Process{
+        If ((Test-Path 'HKLM:\SOFTWARE\LabTechBackup\Service') -eq $False){
+            Write-Error "ERROR: Unable to find backup information on LTSvc. Use New-LTServiceBackup to create a settings backup."
+            return
         }
-        If (($key) -ne $Null -and ($key|Get-Member|Where-Object {$_.Name -match 'Server Address'})) {
-            $Servers = ($Key|Select-Object -Expand 'Server Address' -EA 0).Split('|')|ForEach-Object {$_.Trim()}
-            Add-Member -InputObject $key -MemberType NoteProperty -Name 'Server' -Value $Servers -Force
-        }
-    }#End Try
-    
-    Catch{
-      Write-Error "ERROR: There was a problem reading the registry keys. $($Error[0])"
-    }#End Catch
-  }#End Process
-  
-  End{
-    If ($?){
-        $key
-    }    
-  }#End End
+        Try{
+            $key = Get-ItemProperty HKLM:\SOFTWARE\LabTechBackup\Service -ErrorAction Stop | Select-Object * -exclude $exclude
+            If (($key) -ne $Null -and ($key|Get-Member|Where-Object {$_.Name -match 'BasePath'})) {
+                $key.BasePath = [System.Environment]::ExpandEnvironmentVariables($key.BasePath)
+            }
+            If (($key) -ne $Null -and ($key|Get-Member|Where-Object {$_.Name -match 'Server Address'})) {
+                $Servers = ($Key|Select-Object -Expand 'Server Address' -EA 0).Split('|')|ForEach-Object {$_.Trim()}
+                Add-Member -InputObject $key -MemberType NoteProperty -Name 'Server' -Value $Servers -Force
+            }
+        }#End Try
+        Catch{
+            Write-Error "ERROR: There was a problem reading the backup registry keys. $($Error[0])"
+            return
+        }#End Catch
+    }#End Process
+
+    End{
+        If ($?){
+            return $key
+        }    
+    }#End End
 }#End Function Get-LTServiceInfoBackup
 #endregion Get-LTServiceInfoBackup
 
@@ -2517,30 +2547,81 @@ Function Invoke-LTServiceCommand {
 } # End Function Invoke-LTServiceCommand
 #endregion Invoke-LTServiceCommand
 
-Function Get-LTServiceKeys{
-#region [Get-LTServiceKeys]--------------------------------------------------------
-Param(
-)
-    End {
+Function Initialize-LTServiceKeys{
+#region [Initialize-LTServiceKeys]--------------------------------------------------------
+<#
+.SYNOPSIS
+    This function initializes internal variables needed by other functions
+
+.DESCRIPTION
+    This function will set variables for the Agent and Server passwords needed
+    for encoding and decoding steps. Nothing is returned.
+
+.NOTES
+    Version:        1.1
+    Author:         Darren White
+    Creation Date:  1/25/2018
+    Purpose/Change: Initial function development
+
+    Update Date: 3/18/2018
+    Purpose/Change: Rename to Initialize-LTServiceKeys from Get-LTServiceKeys
+
+.LINK
+    http://labtechconsulting.com
+#>
+    [CmdletBinding()]
+    Param(
+    )
+
+    Process {
         $LTSI=Get-LTServiceInfo -EA 0 -Verbose:$False -WhatIf:$False -Confirm:$False -Debug:$False
-        if (($LTSI) -and ($LTSI|Get-Member|Where-Object {$_.Name -eq 'ServerPassword'})) {
-            write-Debug "Decoding Server Password."
+        If (($LTSI) -and ($LTSI|Get-Member|Where-Object {$_.Name -eq 'ServerPassword'})) {
+            Write-Debug "Decoding Server Password."
             $Script:LTServiceKeys.ServerPasswordString=$(ConvertFrom-LTSecurity -InputString "$($LTSI.ServerPassword)")
-            if (($LTSI) -ne $Null -and ($LTSI|Get-Member|Where-Object {$_.Name -eq 'Password'})) {
+            If (($LTSI) -ne $Null -and ($LTSI|Get-Member|Where-Object {$_.Name -eq 'Password'})) {
                 Write-Debug "Decoding Agent Password."
                 $Script:LTServiceKeys.PasswordString=$(ConvertFrom-LTSecurity -InputString "$($LTSI.Password)" -Key "$($Script:LTServiceKeys.ServerPasswordString)")
-            } else {
+            } Else {
                 $Script:LTServiceKeys.PasswordString=''
             }
-        } else {
+        } Else {
             $Script:LTServiceKeys.ServerPasswordString=''
+            $Script:LTServiceKeys.PasswordString=''
         }
-    }#End 
-}#End Function Get-LTServiceKeys
-#endregion Get-LTServiceKeys
+    }#End Process
+
+    End {
+    }#End End
+}#End Function Initialize-LTServiceKeys
+#endregion Initialize-LTServiceKeys
 
 Function ConvertFrom-LTSecurity{
 #region [ConvertFrom-LTSecurity]----------------------------------------------------
+<#
+.SYNOPSIS
+    This function decodes an encoded Base64 value
+
+.DESCRIPTION
+    This function decodes the provided string using the specified or default key.
+
+.PARAMETER InputString
+    This is the string to be decoded.
+
+.PARAMETER Key
+    This is the key used for decoding. If not provided, default values will be tried.
+
+.PARAMETER Force
+    This forces the function to try alternate key values if decoding fails using provided key.
+
+.NOTES
+    Version:        1.1
+    Author:         Darren White
+    Creation Date:  1/25/2018
+    Purpose/Change: Initial function development
+
+.LINK
+    http://labtechconsulting.com
+#>
 Param(
     [parameter(Mandatory = $true, ValueFromPipeline = $True, ValueFromPipelineByPropertyName = $True, Position = 1)]
     [string[]]$InputString,
@@ -2573,7 +2654,8 @@ Param(
                         $NoKeyPassed=$True
                         $testKey=$DefaultKey
                     }#End If
-                    try {
+                    Write-Debug "Attempting Decode for '$($testInput)' with Key '$($testKey)'"
+                    Try {
                         $numarray=[System.Convert]::FromBase64String($testInput)
                         $ddd = new-object System.Security.Cryptography.TripleDESCryptoServiceProvider
                         $ddd.key=(new-Object Security.Cryptography.MD5CryptoServiceProvider).ComputeHash([Text.Encoding]::UTF8.GetBytes($testKey))
@@ -2581,21 +2663,21 @@ Param(
                         $dd=$ddd.CreateDecryptor()
                         $DecodeString=[System.Text.Encoding]::UTF8.GetString($dd.TransformFinalBlock($numarray,0,($numarray.Length)))
                         $DecodedString+=@($DecodeString)
-                    } catch {
+                    } Catch {
                     }#End Catch
 
                     Finally {
                         if ((Get-Variable -Name dd -Scope 0 -EA 0)) {try {$dd.Dispose()} catch {$dd.Clear()}}
                         if ((Get-Variable -Name ddd -Scope 0 -EA 0)) {try {$ddd.Dispose()} catch {$ddd.Clear()}}
                     }#End Finally
-                } else {
+                } Else {
                 }#End If
             }#End foreach
-            if ($DecodeString -eq $Null) {
+            If ($DecodeString -eq $Null) {
                 If ($Force) {
                     If (($NoKeyPassed)) {
                         $DecodeString=ConvertFrom-LTSecurity -InputString "$($testInput)" -Key '' -Force:$False
-                        if (-not ($DecodeString -eq $Null)) {
+                        If (-not ($DecodeString -eq $Null)) {
                             $DecodedString+=@($DecodeString)
                         }
                     } Else {
@@ -2624,6 +2706,28 @@ Param(
 
 Function ConvertTo-LTSecurity{
 #region [ConvertTo-LTSecurity]----------------------------------------------------
+<#
+.SYNOPSIS
+    This function encodes a value compatible with LT operations.
+
+.DESCRIPTION
+    This function encodes the provided string using the specified or default key.
+
+.PARAMETER InputString
+    This is the string to be encoded.
+
+.PARAMETER Key
+    This is the key used for encoding. If not provided, a default value will be used.
+
+.NOTES
+    Version:        1.1
+    Author:         Darren White
+    Creation Date:  1/25/2018
+    Purpose/Change: Initial function development
+
+.LINK
+    http://labtechconsulting.com
+#>
 Param(
     [parameter(Mandatory = $true, ValueFromPipeline = $false, ValueFromPipelineByPropertyName = $false)]
     [AllowNull()]
@@ -2651,6 +2755,7 @@ Param(
         } catch {
             try { $numarray=[System.Text.Encoding]::ASCII.GetBytes($InputString) } catch {}
         }
+        Write-Debug "Attempting Encode for '$($testInput)' with Key '$($testKey)'"
         try {
             $ddd = new-object System.Security.Cryptography.TripleDESCryptoServiceProvider
             $ddd.key=(new-Object Security.Cryptography.MD5CryptoServiceProvider).ComputeHash([Text.Encoding]::UTF8.GetBytes($Key))
@@ -2659,7 +2764,8 @@ Param(
             $str=[System.Convert]::ToBase64String($dd.TransformFinalBlock($numarray,0,($numarray.Length)))
         } 
         catch {
-            Write-Debug "Failed to Encrypt string."; $str=''
+            Write-Debug "Failed to Encode string: '$($InputString)'"
+            $str=''
         }
         Finally
         {
@@ -2675,12 +2781,15 @@ Function Set-LTProxy{
 #region [Set-LTProxy]-----------------------------------------------------------
 <#
 .SYNOPSIS
-    This function configures module functions to use the specified proxy configuration for all operations as long as the module remains loaded.
+    This function configures module functions to use the specified proxy 
+    configuration for all operations as long as the module remains loaded.
 
 .DESCRIPTION
-    This function will set or clear Proxy settings needed for function and agent operations. If an agent is already installed, 
-    this function will set the ProxyUsername, ProxyPassword, and ProxyServerURL values for the Agent.
-    NOTE - Agent Services will be restarted while changes (if found) are applied.
+    This function will set or clear Proxy settings needed for function and 
+    agent operations. If an agent is already installed, this function will 
+    set the ProxyUsername, ProxyPassword, and ProxyServerURL values for the 
+    Agent.
+    NOTE: Agent Services will be restarted for changes (if found) to be applied.
 
 .PARAMETER ProxyServerURL
     This is the URL and Port to assign as the ProxyServerURL for Module
@@ -2701,7 +2810,7 @@ Function Set-LTProxy{
     This is the encoded Username for Proxy operations. The parameter must be
     encoded with the Agent Password. This Parameter will be decoded using the
     Agent Password, and the decoded string will be configured.
-    NOTE: Reinstallation of the Agent will generate a new password.
+    NOTE: Reinstallation of the Agent will generate a new agent password.
     Example: Set-LTProxy -ProxyServerURL 'proxyhostname.fqdn.com:8080' -EncodedProxyUsername '1GzhlerwMy0ElG9XNgiIkg==' -EncodedProxyPassword 'Duft4r7fekTp5YnQL9F0V9TbP7sKzm0n'
 
 .PARAMETER EncodedProxyPassword
@@ -2726,43 +2835,42 @@ Function Set-LTProxy{
 
 .NOTES
     Version:        1.1
-    Author:         Darren White (Module by Chris Taylor)
-    Website:        labtechconsulting.com
+    Author:         Darren White
     Creation Date:  1/24/2018
-    Purpose/Change: Initial script development
+    Purpose/Change: Initial function development
 
 .LINK
     http://labtechconsulting.com
 #>
 
-[CmdletBinding(SupportsShouldProcess=$True)]
-Param(
-    [parameter(Mandatory = $False, ValueFromPipeline = $True, ValueFromPipelineByPropertyName = $True, Position = 0)]
-    [string]$ProxyServerURL,
+    [CmdletBinding(SupportsShouldProcess=$True)]
+    Param(
+        [parameter(Mandatory = $False, ValueFromPipeline = $True, ValueFromPipelineByPropertyName = $True, Position = 0)]
+        [string]$ProxyServerURL,
 
-    [parameter(Mandatory = $False, ValueFromPipeline = $False, ValueFromPipelineByPropertyName = $True, Position = 1)]
-    [string]$ProxyUsername,
+        [parameter(Mandatory = $False, ValueFromPipeline = $False, ValueFromPipelineByPropertyName = $True, Position = 1)]
+        [string]$ProxyUsername,
 
-    [parameter(Mandatory = $False, ValueFromPipeline = $False, ValueFromPipelineByPropertyName = $True, Position = 2)]
-    [string]$ProxyPassword,
+        [parameter(Mandatory = $False, ValueFromPipeline = $False, ValueFromPipelineByPropertyName = $True, Position = 2)]
+        [string]$ProxyPassword,
 
-    [parameter(Mandatory = $False, ValueFromPipeline = $False, ValueFromPipelineByPropertyName = $True)]
-    [string]$EncodedProxyUsername,
+        [parameter(Mandatory = $False, ValueFromPipeline = $False, ValueFromPipelineByPropertyName = $True)]
+        [string]$EncodedProxyUsername,
 
-    [parameter(Mandatory = $False, ValueFromPipeline = $False, ValueFromPipelineByPropertyName = $True)]
-    [string]$EncodedProxyPassword,
+        [parameter(Mandatory = $False, ValueFromPipeline = $False, ValueFromPipelineByPropertyName = $True)]
+        [string]$EncodedProxyPassword,
 
-    [parameter(Mandatory = $False, ValueFromPipeline = $False, ValueFromPipelineByPropertyName = $True)]
-    [alias('Detect')]
-    [alias('AutoDetect')]
-    [switch]$DetectProxy,
+        [parameter(Mandatory = $False, ValueFromPipeline = $False, ValueFromPipelineByPropertyName = $True)]
+        [alias('Detect')]
+        [alias('AutoDetect')]
+        [switch]$DetectProxy,
 
-    [parameter(Mandatory = $False, ValueFromPipeline = $False, ValueFromPipelineByPropertyName = $True)]
-    [alias('Clear')]
-    [alias('Reset')]
-    [alias('ClearProxy')]
-    [switch]$ResetProxy
-)
+        [parameter(Mandatory = $False, ValueFromPipeline = $False, ValueFromPipelineByPropertyName = $True)]
+        [alias('Clear')]
+        [alias('Reset')]
+        [alias('ClearProxy')]
+        [switch]$ResetProxy
+    )
 
     Begin {
         Clear-Variable LTServiceSettingsChanged,LTSS,LTServiceRestartNeeded,proxyURL,proxyUser,proxyPass,passwd,Svr -EA 0 -WhatIf:$False -Confirm:$False #Clearing Variables for use
@@ -2879,7 +2987,7 @@ Param(
             Write-Error "ERROR: There was an error during the Proxy Configuration process. $($Error[0])" -ErrorAction Stop
         }#End Catch
     }#End Process
-  
+
     End{
         If ($?){
             $LTServiceSettingsChanged=$False
@@ -2909,7 +3017,7 @@ Param(
                         $LTServiceSettingsChanged=$True
                     }
                 }#End If
-            } else {
+            } Else {
                 $svcRun = ('LTService') | Get-Service -EA 0 | Where-Object {$_.Status -eq 'Running'} | Measure-Object | Select-Object -Expand Count
                 if (($svcRun -gt 0) -and ($($Script:LTProxy.ProxyServerURL) -match '.+')) {
                     $LTServiceSettingsChanged=$True
@@ -2941,41 +3049,44 @@ Function Get-LTProxy{
 #region [Get-LTProxy]-----------------------------------------------------------
 <#
 .SYNOPSIS
-    This function retrieves the current agent proxy settings for module functions to use the specified proxy configuration for all operations as long as the module remains loaded.
+    This function retrieves the current agent proxy settings for module functions
+     to use the specified proxy configuration for all communication operations as 
+     long as the module remains loaded.
 
 .DESCRIPTION
     This function will get the current LabTech Proxy settings from the 
     installed agent (if present). If no agent settings are found, the function
     will attempt to discover the current proxy settings for the system.
-    The Proxy Settings determined will be reported.
+    The Proxy Settings determined will be stored in memory for internal use, and
+    returned as the function result.
 
 .NOTES
     Version:        1.1
-    Author:         Darren White (Module by Chris Taylor)
-    Website:        labtechconsulting.com
+    Author:         Darren White
     Creation Date:  1/24/2018
-    Purpose/Change: Initial script development
+    Purpose/Change: Initial function development
+
+    Update Date: 3/18/2018
+    Purpose/Change: Ensure ProxyUser and ProxyPassword are set correctly when proxy
+    is not configured.
 
 .LINK
     http://labtechconsulting.com
 #>
     [CmdletBinding()]
     Param(
-    )   
+    )
 
     Begin{
         Clear-Variable CustomProxyObject,LTSI,LTSS -EA 0 -WhatIf:$False -Confirm:$False #Clearing Variables for use
         Write-Debug "Starting $($myInvocation.InvocationName)"
-        Write-Verbose "Checking for LT Agent Proxy Settings."
+        Write-Verbose "Discovering Proxy Settings used by the LT Agent."
+        $Null=Initialize-LTServiceKeys
     }#End Begin
-    
+
     Process{
-    }#End Process
-    
-    End{
-        $Null=Get-LTServiceKeys
         Try {
-            $LTSI=Get-LTServiceInfo -EA 0 -Verbose:$False -WhatIf:$False -Confirm:$False -Debug:$False
+            $LTSI=Get-LTServiceInfo -EA 0 -WA 0 -Verbose:$False -WhatIf:$False -Confirm:$False -Debug:$False
             If (($LTSI) -ne $Null -and ($LTSI|Get-Member|Where-Object {$_.Name -eq 'ServerPassword'})) {
                 $LTSS=Get-LTServiceSettings -EA 0 -Verbose:$False -WA 0 -Debug:$False
                 If (($LTSS) -ne $Null) {
@@ -2988,14 +3099,14 @@ Function Get-LTProxy{
                         $Script:LTProxy.Enabled=$False
                         $Script:LTProxy.ProxyServerURL=''
                     }#End If
-                    if (($LTSS|Get-Member|Where-Object {$_.Name -eq 'ProxyUsername'}) -and ($LTSS|Select-object -Expand ProxyUsername -EA 0)) {
+                    if ($Script:LTProxy.Enabled -eq $True -and ($LTSS|Get-Member|Where-Object {$_.Name -eq 'ProxyUsername'}) -and ($LTSS|Select-object -Expand ProxyUsername -EA 0)) {
                         $Script:LTProxy.ProxyUsername="$(ConvertFrom-LTSecurity -InputString "$($LTSS|Select-object -Expand ProxyUsername -EA 0)" -Key ("$($Script:LTServiceKeys.PasswordString)",''))"
                         Write-Debug "Setting ProxyUsername to $($Script:LTProxy.ProxyUsername)"
                     } Else {
                         Write-Debug "Setting ProxyUsername to "
                         $Script:LTProxy.ProxyUsername=''
                     }#End If
-                    If (($LTSS|Get-Member|Where-Object {$_.Name -eq 'ProxyPassword'}) -and ($LTSS|Select-object -Expand ProxyPassword -EA 0)) {
+                    If ($Script:LTProxy.Enabled -eq $True -and ($LTSS|Get-Member|Where-Object {$_.Name -eq 'ProxyPassword'}) -and ($LTSS|Select-object -Expand ProxyPassword -EA 0)) {
                         $Script:LTProxy.ProxyPassword="$(ConvertFrom-LTSecurity -InputString "$($LTSS|Select-object -Expand ProxyPassword -EA 0)" -Key ("$($Script:LTServiceKeys.PasswordString)",''))"
                         Write-Debug "Setting ProxyPassword to $($Script:LTProxy.ProxyPassword)"
                     } Else {
@@ -3006,40 +3117,66 @@ Function Get-LTProxy{
             } Else {
                 Write-Verbose "No Server password or settings exist. No Proxy information will be available."
             }#End If
-
-            return $Script:LTProxy
         }#End Try
         Catch{
             Write-Error "ERROR: There was a problem retrieving Proxy Information. $($Error[0])"
         }#End Catch
+    }#End Process
+
+    End{
         Write-Debug "Exiting $($myInvocation.InvocationName)"
+        return $Script:LTProxy
     }#End End
 }#End Function Get-LTProxy
 #endregion Get-LTProxy
 
 Function Initialize-LTServiceModule{
 #region [Initialize-LTServiceModule]--------------------------------------------
+<#
+.SYNOPSIS
+    This function initializes internal variables needed by other functions
 
-    #Initialize LTServiceNetWebClient Object
-    $Script:LTServiceNetWebClient = New-Object System.Net.WebClient
+.DESCRIPTION
+    This function will set variables for the Agent and Server passwords needed
+    for encoding and decoding steps.
+
+.NOTES
+    Version:        1.1
+    Author:         Darren White
+    Creation Date:  1/25/2018
+    Purpose/Change: Initial function development
+
+    Update Date: 3/18/2018
+    Purpose/Change: Rename to Initialize-LTServiceKeys
+
+.LINK
+    http://labtechconsulting.com
+#>
 
     #Populate $Script:LTServiceKeys Object
     $Script:LTServiceKeys = New-Object -TypeName PSObject
     Add-Member -InputObject $Script:LTServiceKeys -MemberType NoteProperty -Name ServerPasswordString -Value ''
     Add-Member -InputObject $Script:LTServiceKeys -MemberType NoteProperty -Name PasswordString -Value ''
 
-    #Populate $LTProxy Object
-    $Script:LTProxy = New-Object -TypeName PSObject
-    Add-Member -InputObject $Script:LTProxy -MemberType NoteProperty -Name ProxyServerURL -Value ''
-    Add-Member -InputObject $Script:LTProxy -MemberType NoteProperty -Name ProxyUsername -Value ''
-    Add-Member -InputObject $Script:LTProxy -MemberType NoteProperty -Name ProxyPassword -Value ''
-    Add-Member -InputObject $Script:LTProxy -MemberType NoteProperty -Name Enabled -Value ''
+    #Populate $Script:LTProxy Object
+    Try{
+        $Script:LTProxy = New-Object -TypeName PSObject
+        Add-Member -InputObject $Script:LTProxy -MemberType NoteProperty -Name ProxyServerURL -Value ''
+        Add-Member -InputObject $Script:LTProxy -MemberType NoteProperty -Name ProxyUsername -Value ''
+        Add-Member -InputObject $Script:LTProxy -MemberType NoteProperty -Name ProxyPassword -Value ''
+        Add-Member -InputObject $Script:LTProxy -MemberType NoteProperty -Name Enabled -Value ''
 
-    #Populate $LTWebProxy Object
-    $Script:LTWebProxy=new-object System.Net.WebProxy
-    $Script:LTServiceNetWebClient.Proxy=$Script:LTWebProxy
+        #Populate $Script:LTWebProxy Object
+        $Script:LTWebProxy=new-object System.Net.WebProxy
 
-    $Null=Get-LTProxy
+        #Initialize $Script:LTServiceNetWebClient Object
+        $Script:LTServiceNetWebClient = New-Object System.Net.WebClient
+        $Script:LTServiceNetWebClient.Proxy=$Script:LTWebProxy
+    } Catch {
+        Write-Error "Failed Initializing internal Proxy Objects/Variables."
+    }
+
+    $Null=Get-LTProxy -ErrorAction Continue
 
 }#End Initialize-LTServiceModule
 #endregion Initialize-LTServiceModule
