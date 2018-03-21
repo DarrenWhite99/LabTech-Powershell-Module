@@ -1,4 +1,5 @@
-#powershell "$LabtechModule='https://raw.githubusercontent.com/DarrenWhite99/LabTech-Powershell-Module/master/LabTech.psm1'; (New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/DarrenWhite99/LabTech-Powershell-Module/TestScript/ExerciseFunctions.ps1') | iex -verbose"
+#start powershell -noexit "$LabtechModule='https://raw.githubusercontent.com/DarrenWhite99/LabTech-Powershell-Module/master/LabTech.psm1'; (New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/DarrenWhite99/LabTech-Powershell-Module/TestScript/ExerciseFunctions.ps1') | iex -verbose"
+#start powershell -noexit "$LabtechModule='https://raw.githubusercontent.com/DarrenWhite99/LabTech-Powershell-Module/master/LabTech.psm1'; (New-Object Net.WebClient).DownloadString('C:\Users\Dwhite\Documents\GitHub\LabTech-Powershell-Module\ExerciseFunctions.ps1') | iex -verbose"
 #https://raw.githubusercontent.com/DarrenWhite99/LabTech-Powershell-Module/master/LabTech.psm1
 
 $DebugPreference='Continue'
@@ -16,6 +17,8 @@ If ($LabtechModule -match '//') {
 } Else {"Could not find source $($LabtechModule)"; return}
 If (-not (Test-Path $DestModulePath)) {"Failed to prepare local copy of $($LabtechModule) in $($DestModulePath)"}
 
+$DestModulePath=Get-Item $DestModulePath
+
 #Starting Script
 function WhatIfTests {
 $DebugPreference='Continue'
@@ -25,10 +28,9 @@ $ErrorActionPreference='Stop'
 $WarningPreference='Stop'
 
 'Running "WhatIf" tests - Any hard errors will stop the script.'
-'Whatif Running Test-LTPorts'; Test-LTPorts -WhatIf
-'Whatif Testing Get-LTServiceSettings'; Get-LTServiceSettings -WhatIf
-'Whatif Testing New-LTServiceBackup'; New-LTServiceBackup -WhatIf
-'Whatif Checking LT Backup Settings'; Get-LTServiceInfoBackup -WhatIf
+#'Whatif Testing Get-LTServiceSettings'; Get-LTServiceSettings -WhatIf
+#'Whatif Testing New-LTServiceBackup'; New-LTServiceBackup -WhatIf
+#'Whatif Checking LT Backup Info'; Get-LTServiceInfoBackup -WhatIf
 
 'Whatif Testing Get-LTServiceInfo'; Get-LTServiceInfo -WhatIf
 'Whatif Running Restart-LTService'; Restart-LTService -WhatIf
@@ -36,8 +38,22 @@ $WarningPreference='Stop'
 'Whatif Running Start-LTService'; Start-LTService -WhatIf
 'Whatif Running Reinstall-LTService'; Reinstall-LTService -WhatIf
 'Whatif Running Get-LTServiceInfo | Uninstall-LTService'; Get-LTServiceInfo | Uninstall-LTService -WhatIf
-'Whatif Running Get-LTServiceInfo | Install-LTService'; Get-LTServiceInfo | Install-LTService -WhatIf
+'Whatif Running Get-LTServiceInfo | Install-LTService'; Get-LTServiceInfo | Install-LTService -Force -WA 'Continue' -WhatIf
 
+'Whatif Running Hide-LTAddRemove'; Hide-LTAddRemove -WhatIf
+'Whatif Running Show-LTAddRemove'; Show-LTAddRemove -WhatIf
+'Whatif Running Rename-LTAddRemove'; Rename-LTAddRemove -Name 'Automate Testing Agent' -WhatIf
+'Whatif Running Rename-LTAddRemove with Publisher'; Rename-LTAddRemove -Name 'Automate Testing Agent' -PublisherName 'Automate Testing Inc.' -WhatIf
+'Whatif Running Invoke-LTServiceCommand ''Send Status'''; Invoke-LTServiceCommand 'Send Status' -WhatIf
+'Whatif Running ''Send Status'' | Invoke-LTServiceCommand'; 'Send Status' | Invoke-LTServiceCommand -WhatIf
+'Whatif Running Set-LTProxy -ProxyServerURL ''http://www.notrealproxy.com/'''; Set-LTProxy -ProxyServerURL 'http://www.notrealproxy.com/' -WhatIf
+'Whatif Running Set-LTProxy -ProxyServerURL ''http://www.notrealproxy.com/'' -ProxyUsername ''proxyuser'' -ProxyPassword ''123'' -WhatIf'; Set-LTProxy -ProxyServerURL 'http://www.notrealproxy.com/' -ProxyUsername 'proxyuser' -ProxyPassword '123' -WhatIf
+'Whatif Running Set-LTProxy -Clear'; Set-LTProxy -Clear -WhatIf
+'Whatif Running Set-LTProxy -Detect'; Set-LTProxy -Detect -WhatIf
+'Whatif Running Reset-LTService'; Reset-LTService -WhatIf
+'Whatif Running Reset-LTService -MAC -Nowait'; Reset-LTService -MAC -Nowait -WhatIf
+'Whatif Running Reset-LTService -MAC -Location -ID -WhatIf'; Reset-LTService -MAC -Location -ID -WhatIf
+'Whatif Running Reset-LTService -Nowait -WhatIf'; Reset-LTService -Nowait -WhatIf
 }
 
 function Round1Tests {
@@ -135,33 +151,36 @@ function Round3Tests {
 
 $ErrorActionPreference='Stop'
 $WarningPreference='Stop'
-Import-Module $DestModulePath
+Import-Module $DestModulePath.FullName
 WhatIfTests
-Remove-Module $DestModulePath
+Remove-Module $DestModulePath.BaseName
 'Done with -WhatIf tests.. Moving on to LIVE tests. Observing 30 seconds of silence.'
+
+break;
+
 Start-Sleep 30
 
 $ErrorActionPreference='Stop'
 $WarningPreference='Stop'
-Import-Module $DestModulePath
+Import-Module $DestModulePath.FullName
 Round1Tests
-Remove-Module $DestModulePath
+Remove-Module $DestModulePath.BaseName
 'Done with Round1 tests..'
 Start-Sleep 5
 
 $ErrorActionPreference='Stop'
 $WarningPreference='Stop'
-Import-Module $DestModulePath
+Import-Module $DestModulePath.FullName
 Round2Tests
-Remove-Module $DestModulePath
+Remove-Module $DestModulePath.BaseName
 'Done with Round2 tests'
 Start-Sleep 5
 
 $ErrorActionPreference='Stop'
 $WarningPreference='Stop'
-Import-Module $DestModulePath
+Import-Module $DestModulePath.FullName
 Round3Tests
-Remove-Module $DestModulePath
+Remove-Module $DestModulePath.BaseName
 'Done with Round3 tests'
 Start-Sleep 5
 
@@ -169,27 +188,27 @@ Start-Sleep 5
 
 $ErrorActionPreference='Stop'
 $WarningPreference='Stop'
-(Get-Content $DestModulePath|Out-String)|iex;
+(Get-Content $DestModulePath.FullName|Out-String)|iex;
 WhatIfTests
 'Done with -WhatIf tests.. Moving on to LIVE tests. Observing 30 seconds of silence.'
 Start-Sleep 30
 
 $ErrorActionPreference='Stop'
 $WarningPreference='Stop'
-(Get-Content $DestModulePath|Out-String)|iex;
+(Get-Content $DestModulePath.FullName|Out-String)|iex;
 Round1Tests
 'Done with Round1 tests..'
 Start-Sleep 5
 
 $ErrorActionPreference='Stop'
 $WarningPreference='Stop'
-(Get-Content $DestModulePath|Out-String)|iex;
+(Get-Content $DestModulePath.FullName|Out-String)|iex;
 Round2Tests
 'Done with Round2 tests'
 Start-Sleep 5
 
 $ErrorActionPreference='Stop'
 $WarningPreference='Stop'
-(Get-Content $DestModulePath|Out-String)|iex;
+(Get-Content $DestModulePath.FullName|Out-String)|iex;
 Round3Tests
 'Done with Round3 tests'
