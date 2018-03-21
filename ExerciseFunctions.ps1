@@ -156,8 +156,6 @@ WhatIfTests
 Remove-Module $DestModulePath.BaseName
 'Done with -WhatIf tests.. Moving on to LIVE tests. Observing 30 seconds of silence.'
 
-break;
-
 Start-Sleep 30
 
 $ErrorActionPreference='Stop'
