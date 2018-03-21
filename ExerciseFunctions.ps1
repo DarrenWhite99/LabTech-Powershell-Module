@@ -198,6 +198,7 @@ Start-Sleep 5
 
 (Get-Content $DestModulePath.FullName|Out-String)|iex;
 Round2Tests
+WhatIfTests
 'Done with Round2 tests'
 Start-Sleep 5
 
