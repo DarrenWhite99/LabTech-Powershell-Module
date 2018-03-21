@@ -41,28 +41,28 @@ If (-not (Get-LTServiceInfo -EA 0)) {
 #'Whatif Testing New-LTServiceBackup'; New-LTServiceBackup -WhatIf
 #'Whatif Checking LT Backup Info'; Get-LTServiceInfoBackup -WhatIf
 
-'Whatif Testing Get-LTServiceInfo'; Get-LTServiceInfo -WhatIf
-'Whatif Running Restart-LTService'; Restart-LTService -WhatIf
-'Whatif Running Stop-LTService'; Stop-LTService -WhatIf
-'Whatif Running Start-LTService'; Start-LTService -WhatIf
-'Whatif Running Reinstall-LTService'; Reinstall-LTService -WhatIf
-'Whatif Running Get-LTServiceInfo | Uninstall-LTService'; Get-LTServiceInfo | Uninstall-LTService -WhatIf
-'Whatif Running Get-LTServiceInfo | Install-LTService'; Get-LTServiceInfo | Install-LTService -Force -WA 'Continue' -WhatIf
+'Whatif Testing Get-LTServiceInfo'; Get-LTServiceInfo -WhatIf -EA $ErrorActionPreference -WA $WarningPreference
+'Whatif Running Restart-LTService'; Restart-LTService -WhatIf -EA $ErrorActionPreference -WA $WarningPreference
+'Whatif Running Stop-LTService'; Stop-LTService -WhatIf -EA $ErrorActionPreference -WA $WarningPreference
+'Whatif Running Start-LTService'; Start-LTService -WhatIf -EA $ErrorActionPreference -WA $WarningPreference
+'Whatif Running Reinstall-LTService'; Reinstall-LTService -WhatIf -EA $ErrorActionPreference -WA $WarningPreference
+'Whatif Running Get-LTServiceInfo | Uninstall-LTService'; Get-LTServiceInfo -EA 0-WA 0 | Uninstall-LTService -WhatIf -EA $ErrorActionPreference -WA 'Continue'
+'Whatif Running Get-LTServiceInfo | Install-LTService'; Get-LTServiceInfo -EA 0 -WA 0 | Install-LTService -EA $ErrorActionPreference -Force -WA 'Continue' -WhatIf
 
-'Whatif Running Hide-LTAddRemove'; Hide-LTAddRemove -WhatIf
-'Whatif Running Show-LTAddRemove'; Show-LTAddRemove -WhatIf
-'Whatif Running Rename-LTAddRemove'; Rename-LTAddRemove -Name 'Automate Testing Agent' -WhatIf
-'Whatif Running Rename-LTAddRemove with Publisher'; Rename-LTAddRemove -Name 'Automate Testing Agent' -PublisherName 'Automate Testing Inc.' -WhatIf
-'Whatif Running Invoke-LTServiceCommand ''Send Status'''; Invoke-LTServiceCommand 'Send Status' -WhatIf
-'Whatif Running ''Send Status'' | Invoke-LTServiceCommand'; 'Send Status' | Invoke-LTServiceCommand -WhatIf
-'Whatif Running Set-LTProxy -ProxyServerURL ''http://www.notrealproxy.com/'''; Set-LTProxy -ProxyServerURL 'http://www.notrealproxy.com/' -WhatIf
-'Whatif Running Set-LTProxy -ProxyServerURL ''http://www.notrealproxy.com/'' -ProxyUsername ''proxyuser'' -ProxyPassword ''123'' -WhatIf'; Set-LTProxy -ProxyServerURL 'http://www.notrealproxy.com/' -ProxyUsername 'proxyuser' -ProxyPassword '123' -WhatIf
-'Whatif Running Set-LTProxy -Clear'; Set-LTProxy -Clear -WhatIf
-'Whatif Running Set-LTProxy -Detect'; Set-LTProxy -Detect -WhatIf
-'Whatif Running Reset-LTService'; Reset-LTService -WhatIf
-'Whatif Running Reset-LTService -MAC -Nowait'; Reset-LTService -MAC -Nowait -WhatIf
-'Whatif Running Reset-LTService -MAC -Location -ID -WhatIf'; Reset-LTService -MAC -Location -ID -WhatIf
-'Whatif Running Reset-LTService -Nowait -WhatIf'; Reset-LTService -Nowait -WhatIf
+'Whatif Running Hide-LTAddRemove'; Hide-LTAddRemove -WhatIf -EA $ErrorActionPreference -WA $WarningPreference
+'Whatif Running Show-LTAddRemove'; Show-LTAddRemove -WhatIf -EA $ErrorActionPreference -WA $WarningPreference
+'Whatif Running Rename-LTAddRemove'; Rename-LTAddRemove -Name 'Automate Testing Agent' -WhatIf -EA $ErrorActionPreference -WA $WarningPreference
+'Whatif Running Rename-LTAddRemove with Publisher'; Rename-LTAddRemove -Name 'Automate Testing Agent' -PublisherName 'Automate Testing Inc.' -WhatIf -EA $ErrorActionPreference -WA $WarningPreference
+'Whatif Running Invoke-LTServiceCommand ''Send Status'''; Invoke-LTServiceCommand 'Send Status' -WhatIf -EA $ErrorActionPreference -WA $WarningPreference
+'Whatif Running ''Send Status'' | Invoke-LTServiceCommand'; 'Send Status' | Invoke-LTServiceCommand -WhatIf -EA $ErrorActionPreference -WA $WarningPreference
+'Whatif Running Set-LTProxy -ProxyServerURL ''http://www.notrealproxy.com/'''; Set-LTProxy -ProxyServerURL 'http://www.notrealproxy.com/' -WhatIf -EA $ErrorActionPreference -WA $WarningPreference
+'Whatif Running Set-LTProxy -ProxyServerURL ''http://www.notrealproxy.com/'' -ProxyUsername ''proxyuser'' -ProxyPassword ''123'' -WhatIf'; Set-LTProxy -ProxyServerURL 'http://www.notrealproxy.com/' -ProxyUsername 'proxyuser' -ProxyPassword '123' -WhatIf -EA $ErrorActionPreference -WA $WarningPreference
+'Whatif Running Set-LTProxy -Clear'; Set-LTProxy -Clear -WhatIf -EA $ErrorActionPreference -WA $WarningPreference
+'Whatif Running Set-LTProxy -Detect'; Set-LTProxy -Detect -WhatIf -EA $ErrorActionPreference -WA $WarningPreference
+'Whatif Running Reset-LTService'; Reset-LTService -WhatIf -EA $ErrorActionPreference -WA $WarningPreference
+'Whatif Running Reset-LTService -MAC -Nowait'; Reset-LTService -MAC -Nowait -WhatIf -EA $ErrorActionPreference -WA $WarningPreference
+'Whatif Running Reset-LTService -MAC -Location -ID -WhatIf'; Reset-LTService -MAC -Location -ID -WhatIf -EA $ErrorActionPreference -WA $WarningPreference
+'Whatif Running Reset-LTService -Nowait -WhatIf'; Reset-LTService -Nowait -WhatIf -EA $ErrorActionPreference -WA $WarningPreference
 }
 
 function Round1Tests {
