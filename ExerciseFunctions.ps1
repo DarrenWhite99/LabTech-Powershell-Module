@@ -28,6 +28,13 @@ $ErrorActionPreference='Stop'
 $WarningPreference='Stop'
 
 'Running "WhatIf" tests - Any hard errors will stop the script.'
+
+If (-not (Get-LTServiceInfo -EA 0)) {
+    'LTService is not installed. Switching Error and WarningPreference to Continue'
+    $ErrorActionPreference='Continue'
+    $WarningPreference='Continue'
+}
+
 #'Whatif Testing Get-LTServiceSettings'; Get-LTServiceSettings -WhatIf
 #'Whatif Testing New-LTServiceBackup'; New-LTServiceBackup -WhatIf
 #'Whatif Checking LT Backup Info'; Get-LTServiceInfoBackup -WhatIf
@@ -170,6 +177,7 @@ $ErrorActionPreference='Stop'
 $WarningPreference='Stop'
 Import-Module $DestModulePath.FullName
 Round2Tests
+WhatIfTests
 Remove-Module $DestModulePath.BaseName
 'Done with Round2 tests'
 Start-Sleep 5
