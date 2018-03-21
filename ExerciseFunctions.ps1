@@ -46,7 +46,7 @@ If (-not (Get-LTServiceInfo -EA 0)) {
 'Whatif Running Stop-LTService'; Stop-LTService -WhatIf -EA $ErrorActionPreference -WA $WarningPreference
 'Whatif Running Start-LTService'; Start-LTService -WhatIf -EA $ErrorActionPreference -WA $WarningPreference
 'Whatif Running Reinstall-LTService'; Reinstall-LTService -WhatIf -EA $ErrorActionPreference -WA $WarningPreference
-'Whatif Running Get-LTServiceInfo | Uninstall-LTService'; Get-LTServiceInfo -EA 0-WA 0 | Uninstall-LTService -WhatIf -EA $ErrorActionPreference -WA 'Continue'
+'Whatif Running Get-LTServiceInfo | Uninstall-LTService'; Get-LTServiceInfo -EA 0 -WA 0 | Uninstall-LTService -WhatIf -EA $ErrorActionPreference -WA 'Continue'
 'Whatif Running Get-LTServiceInfo | Install-LTService'; Get-LTServiceInfo -EA 0 -WA 0 | Install-LTService -EA $ErrorActionPreference -Force -WA 'Continue' -WhatIf
 
 'Whatif Running Hide-LTAddRemove'; Hide-LTAddRemove -WhatIf -EA $ErrorActionPreference -WA $WarningPreference
