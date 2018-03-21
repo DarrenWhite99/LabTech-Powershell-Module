@@ -1,28 +1,52 @@
-#powershell "(New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/DarrenWhite99/LabTech-Powershell-Module/ProxyAware/LabTech.psm1') | iex -verbose;(New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/DarrenWhite99/LabTech-Powershell-Module/TestScript/ExerciseFunctions.ps1') | iex -verbose"
+#powershell "$LabtechModule='https://raw.githubusercontent.com/DarrenWhite99/LabTech-Powershell-Module/master/LabTech.psm1'; (New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/DarrenWhite99/LabTech-Powershell-Module/TestScript/ExerciseFunctions.ps1') | iex -verbose"
 #https://raw.githubusercontent.com/DarrenWhite99/LabTech-Powershell-Module/master/LabTech.psm1
 
 $DebugPreference='Continue'
-$ErrorActionPreference='Continue'
 $InformationPreference='Continue'
 $VerbosePreference='Continue'
+$ErrorActionPreference='Continue'
 $WarningPreference='Continue'
 
-'Running "WhatIf" tests'
-'Whatif Running Test-LTPorts'; try {Test-LTPorts -WhatIf} catch {'Error running Test-LTPorts'; $($Error[0])}
-'Whatif Testing Get-LTServiceSettings'; try { Get-LTServiceSettings -WhatIf} catch {'Error'; $($Error[0])}
-'Whatif Testing New-LTServiceBackup'; try {New-LTServiceBackup -WhatIf} catch {'Error'; $($Error[0])}
-'Whatif Checking LT Backup Settings'; try {Get-LTServiceInfoBackup -WhatIf} catch {'Error'; $($Error[0])}
+$DestModulePath="$($Env:windir)\temp\labtech-$(Get-Random -Minimum 10000 -Maximum 99999).psm1"
+If ($LabtechModule -match '//') {
+  If (-not ($LabtechModule -match 'https?://.+')) {"Invalid URL format specified: $($LabtechModule)"; return}
+  (New-Object Net.WebClient).DownloadFile($LabtechModule,$DestModulePath)
+} ElseIf (($LabtechModule) -and (Test-Path $LabtechModule)) {
+  Copy-Item $LabtechModule $DestModulePath -Force
+} Else {"Could not find source $($LabtechModule)"; return}
+If (-not (Test-Path $DestModulePath)) {"Failed to prepare local copy of $($LabtechModule) in $($DestModulePath)"}
 
-'Whatif Testing Get-LTServiceInfo'; try {Get-LTServiceInfo -WhatIf} catch {'Error'; $($Error[0])}
-'Whatif Running Restart-LTService'; try {Restart-LTService -WhatIf} catch {'Error'; $($Error[0])}
-'Whatif Running Stop-LTService'; try {Stop-LTService -WhatIf} catch {'Error running Stop-LTService'; $($Error[0])}
-'Whatif Running Start-LTService'; try {Start-LTService -WhatIf} catch {'Error running Start-LTService'; $($Error[0])}
-'Whatif Running Reinstall-LTService'; try {Reinstall-LTService -WhatIf} catch {'Error running Reinstall-LTService'; $($Error[0])}
-'Whatif Running Get-LTServiceInfo | Uninstall-LTService'; try { Get-LTServiceInfo | Uninstall-LTService -WhatIf} catch {'Error running Get-LTServiceInfo | Uninstall-LTService'; $($Error[0])}
-'Whatif Running Get-LTServiceInfo | Install-LTService'; try { Get-LTServiceInfo | Install-LTService -WhatIf} catch {'Error running Get-LTServiceInfo | Install-LTService'; $($Error[0])}
+#Starting Script
+function WhatIfTests {
+$DebugPreference='Continue'
+$InformationPreference='Continue'
+$VerbosePreference='Continue'
+$ErrorActionPreference='Stop'
+$WarningPreference='Stop'
 
-'Done with -WhatIf tests.. Moving on to LIVE tests. Observing 30 seconds of silence.'
-Start-Sleep 30
+'Running "WhatIf" tests - Any hard errors will stop the script.'
+'Whatif Running Test-LTPorts'; Test-LTPorts -WhatIf
+'Whatif Testing Get-LTServiceSettings'; Get-LTServiceSettings -WhatIf
+'Whatif Testing New-LTServiceBackup'; New-LTServiceBackup -WhatIf
+'Whatif Checking LT Backup Settings'; Get-LTServiceInfoBackup -WhatIf
+
+'Whatif Testing Get-LTServiceInfo'; Get-LTServiceInfo -WhatIf
+'Whatif Running Restart-LTService'; Restart-LTService -WhatIf
+'Whatif Running Stop-LTService'; Stop-LTService -WhatIf
+'Whatif Running Start-LTService'; Start-LTService -WhatIf
+'Whatif Running Reinstall-LTService'; Reinstall-LTService -WhatIf
+'Whatif Running Get-LTServiceInfo | Uninstall-LTService'; Get-LTServiceInfo | Uninstall-LTService -WhatIf
+'Whatif Running Get-LTServiceInfo | Install-LTService'; Get-LTServiceInfo | Install-LTService -WhatIf
+
+}
+
+function Round1Tests {
+'Running Round 1 Tests'
+$DebugPreference='Continue'
+$InformationPreference='Continue'
+$VerbosePreference='Continue'
+$ErrorActionPreference='Continue'
+$WarningPreference='Continue'
 
 'Running Test-LTPorts -Quiet'
 try {Test-LTPorts -Quiet}
@@ -32,12 +56,12 @@ catch {'Error running Test-Ports -Quiet'; $($Error[0])}
 try {Test-LTPorts}
 catch {'Error running Test-LTPorts'; $($Error[0])}
 
-try {if (!($LTServiceInfo)) {'Loading from Get-LTServiceInfo'; $LTServiceInfo = Get-LTServiceInfo}}
+try {if (!($Global:LTServiceInfo)) {'Loading from Get-LTServiceInfo'; $Global:LTServiceInfo = Get-LTServiceInfo}}
 catch {'Error Get-LTServiceInfo'; $($Error[0])}
-if (!($LTServiceInfo)) {'Could not get LTServiceInfo'} else {$LTServiceInfo}
-try {if (!($LTServiceSettings)) {'Loading from Get-LTServiceSettings'; $LTServiceSettings = Get-LTServiceSettings}}
+if (!($Global:LTServiceInfo)) {'Could not get LTServiceInfo'} else {$Global:LTServiceInfo}
+try {if (!($Global:LTServiceSettings)) {'Loading from Get-LTServiceSettings'; $Global:LTServiceSettings = Get-LTServiceSettings}}
 catch {'Error running Get-LTServiceSettings'; $($Error[0])}
-if (!($LTServiceSettings)) {'Could not get LTServiceSettings'} else {$LTServiceSettings}
+if (!($Global:LTServiceSettings)) {'Could not get LTServiceSettings'} else {$Global:LTServiceSettings}
 
 'Running New-LTServiceBackup'
 try {New-LTServiceBackup}
@@ -48,49 +72,124 @@ try {Restart-LTService}
 catch {'Error running Restart-LTService'; $($Error[0])}
 
 'Checking LT Backup Settings' 
-try {$BackupSettings = Get-LTServiceInfoBackup -ErrorAction SilentlyContinue}
+try {$Global:BackupSettings = Get-LTServiceInfoBackup -ErrorAction SilentlyContinue}
 catch {}
-if (!($BackupSettings)) {'Error - Could not get BackupSettings'} else {$BackupSettings}
+if (!($Global:BackupSettings)) {'Error - Could not get BackupSettings'} else {$Global:BackupSettings}
 
 'Running Stop-LTService'
 try {Stop-LTService; Start-Sleep 5}
 catch {'Error running Stop-LTService'; $($Error[0])}
+}
 
+function Round2Tests {
+'Running Round 2 Tests'
+
+$DebugPreference='Continue'
+$InformationPreference='Continue'
+$VerbosePreference='Continue'
+$ErrorActionPreference='Continue'
+$WarningPreference='Continue'
 'Running Start-LTService'
 try {Start-LTService}
 catch {'Error running Start-LTService'; $($Error[0])}
 
-if (!($BackupSettings)) {
-  'Running Reinstall-LTService'
-  try {Reinstall-LTService}
-  catch {'Error running Reinstall-LTService'; $($Error[0])}
-} else {
-  'Running $BackupSettings | Reinstall-LTService'
-  try { $BackupSettings | Reinstall-LTService 
+'Running $Global:BackupSettings | Reinstall-LTService'
+    $Global:BackupSettings | Reinstall-LTService -ErrorAction Stop
 
     'Reinstall Succeeded. Testing Uninstall/Reinstall individually.'
+    if (!($Global:BackupSettings)) {$Global:BackupSettings = Get-LTServiceInfo -ErrorAction Stop}
+  
+    Start-Sleep 10 
     'Running Get-LTServiceInfo | Uninstall-LTService'
     try { Get-LTServiceInfo | Uninstall-LTService }
     catch {'Error running Get-LTServiceInfo | Uninstall-LTService'; $($Error[0])}
+}
+
+function Round3Tests {
+    'Running Round 3 Tests'
+
+    $DebugPreference='Continue'
+    $InformationPreference='Continue'
+    $VerbosePreference='Continue'
+    $ErrorActionPreference='Continue'
+    $WarningPreference='Continue'
 
     Start-Sleep 10 
-    'Running $BackupSettings | Install-LTService'
-    try { $BackupSettings | Install-LTService }
-    catch {'Error running $BackupSettings | Install-LTService'; $($Error[0])}
+    'Running $Global:BackupSettings | Install-LTService'
+    try { $Global:BackupSettings | Install-LTService }
+    catch {'Error running $Global:BackupSettings | Install-LTService'; $($Error[0])}
 
-    $AllFound=$True; $LTSI=(Get-LTServiceInfo -EA 0 |Get-Member -EA 0|Select-Object -Expand Name -EA 0)
-    @('ID','Server Address','LocationID','MAC') | ForEach-Object {if ($LTSI -notcontains $_) {$AllFound=$False}}
+    $LTSI=(Get-LTServiceInfo -EA 0 |Get-Member -EA 0|Select-Object -Expand Name -EA 0)
+    $AllFound=$True; @('ID','Server Address','LocationID','MAC') | ForEach-Object {if ($LTSI -notcontains $_) {$AllFound=$False}}
     if ($AllFound -eq $True) {
-      'Running Get-LTServiceInfo | Install-LTService on top of existing install.'
-      net.exe stop ltsvcmon
-      net.exe stop ltservice
-      sc.exe delete ltsvcmon
-      sc.exe delete ltservice
-      Get-LTServiceInfo  | Install-LTService
+      Try {
+        'Running Get-LTServiceInfo | Install-LTService on top of existing install.'
+        Stop-LTService
+        sc.exe delete ltsvcmon
+        sc.exe delete ltservice
+        Get-LTServiceInfo  | Install-LTService
+      } catch {'Error running $Global:BackupSettings | Install-LTService'; $($Error[0])}
     }
-
-  }
-  catch {'Error running $BackupSettings | Reinstall-LTService'; $($Error[0])}
 }
 
 
+$ErrorActionPreference='Stop'
+$WarningPreference='Stop'
+Import-Module $DestModulePath
+WhatIfTests
+Remove-Module $DestModulePath
+'Done with -WhatIf tests.. Moving on to LIVE tests. Observing 30 seconds of silence.'
+Start-Sleep 30
+
+$ErrorActionPreference='Stop'
+$WarningPreference='Stop'
+Import-Module $DestModulePath
+Round1Tests
+Remove-Module $DestModulePath
+'Done with Round1 tests..'
+Start-Sleep 5
+
+$ErrorActionPreference='Stop'
+$WarningPreference='Stop'
+Import-Module $DestModulePath
+Round2Tests
+Remove-Module $DestModulePath
+'Done with Round2 tests'
+Start-Sleep 5
+
+$ErrorActionPreference='Stop'
+$WarningPreference='Stop'
+Import-Module $DestModulePath
+Round3Tests
+Remove-Module $DestModulePath
+'Done with Round3 tests'
+Start-Sleep 5
+
+'Switching from Module Mode to IEX mode'
+
+$ErrorActionPreference='Stop'
+$WarningPreference='Stop'
+(Get-Content $DestModulePath|Out-String)|iex;
+WhatIfTests
+'Done with -WhatIf tests.. Moving on to LIVE tests. Observing 30 seconds of silence.'
+Start-Sleep 30
+
+$ErrorActionPreference='Stop'
+$WarningPreference='Stop'
+(Get-Content $DestModulePath|Out-String)|iex;
+Round1Tests
+'Done with Round1 tests..'
+Start-Sleep 5
+
+$ErrorActionPreference='Stop'
+$WarningPreference='Stop'
+(Get-Content $DestModulePath|Out-String)|iex;
+Round2Tests
+'Done with Round2 tests'
+Start-Sleep 5
+
+$ErrorActionPreference='Stop'
+$WarningPreference='Stop'
+(Get-Content $DestModulePath|Out-String)|iex;
+Round3Tests
+'Done with Round3 tests'
