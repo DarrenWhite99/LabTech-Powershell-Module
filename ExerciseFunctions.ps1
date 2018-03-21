@@ -158,8 +158,6 @@ function Round3Tests {
 }
 
 
-$ErrorActionPreference='Stop'
-$WarningPreference='Stop'
 Import-Module $DestModulePath.FullName
 WhatIfTests
 Remove-Module $DestModulePath.BaseName
@@ -167,16 +165,12 @@ Remove-Module $DestModulePath.BaseName
 
 Start-Sleep 30
 
-$ErrorActionPreference='Stop'
-$WarningPreference='Stop'
 Import-Module $DestModulePath.FullName
 Round1Tests
 Remove-Module $DestModulePath.BaseName
 'Done with Round1 tests..'
 Start-Sleep 5
 
-$ErrorActionPreference='Stop'
-$WarningPreference='Stop'
 Import-Module $DestModulePath.FullName
 Round2Tests
 WhatIfTests
@@ -184,8 +178,6 @@ Remove-Module $DestModulePath.BaseName
 'Done with Round2 tests'
 Start-Sleep 5
 
-$ErrorActionPreference='Stop'
-$WarningPreference='Stop'
 Import-Module $DestModulePath.FullName
 Round3Tests
 Remove-Module $DestModulePath.BaseName
@@ -194,29 +186,21 @@ Start-Sleep 5
 
 'Switching from Module Mode to IEX mode'
 
-$ErrorActionPreference='Stop'
-$WarningPreference='Stop'
 (Get-Content $DestModulePath.FullName|Out-String)|iex;
 WhatIfTests
 'Done with -WhatIf tests.. Moving on to LIVE tests. Observing 30 seconds of silence.'
 Start-Sleep 30
 
-$ErrorActionPreference='Stop'
-$WarningPreference='Stop'
 (Get-Content $DestModulePath.FullName|Out-String)|iex;
 Round1Tests
 'Done with Round1 tests..'
 Start-Sleep 5
 
-$ErrorActionPreference='Stop'
-$WarningPreference='Stop'
 (Get-Content $DestModulePath.FullName|Out-String)|iex;
 Round2Tests
 'Done with Round2 tests'
 Start-Sleep 5
 
-$ErrorActionPreference='Stop'
-$WarningPreference='Stop'
 (Get-Content $DestModulePath.FullName|Out-String)|iex;
 Round3Tests
 'Done with Round3 tests'
