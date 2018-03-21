@@ -27,13 +27,15 @@ $VerbosePreference='Continue'
 $ErrorActionPreference='Stop'
 $WarningPreference='Stop'
 
-'Running "WhatIf" tests - Any hard errors will stop the script.'
+'Checking if LTService is installed'
 
 If (-not (Get-LTServiceInfo -EA 0)) {
-    'LTService is not installed. Switching Error and WarningPreference to Continue'
+    'LTService is not installed. Switching Error and Warning Action Preference to Continue'
     $ErrorActionPreference='Continue'
     $WarningPreference='Continue'
 }
+
+'Running "WhatIf" tests - Any hard errors will stop the script.'
 
 #'Whatif Testing Get-LTServiceSettings'; Get-LTServiceSettings -WhatIf
 #'Whatif Testing New-LTServiceBackup'; New-LTServiceBackup -WhatIf
