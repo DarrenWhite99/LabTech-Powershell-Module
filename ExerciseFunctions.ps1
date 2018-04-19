@@ -46,8 +46,10 @@ If (-not (Get-LTServiceInfo -EA 0)) {
 'Whatif Running Stop-LTService'; Stop-LTService -WhatIf -EA $ErrorActionPreference -WA $WarningPreference
 'Whatif Running Start-LTService'; Start-LTService -WhatIf -EA $ErrorActionPreference -WA $WarningPreference
 'Whatif Running Reinstall-LTService'; Reinstall-LTService -WhatIf -EA $ErrorActionPreference -WA $WarningPreference
+'Whatif Running Reinstall-LTService -Hide -Rename MyAutoAgent'; Reinstall-LTService -Hide -Rename MyAutoAgent -WhatIf -EA $ErrorActionPreference -WA $WarningPreference
 'Whatif Running Get-LTServiceInfo | Uninstall-LTService'; Get-LTServiceInfo -EA 0 -WA 0 | Uninstall-LTService -WhatIf -EA $ErrorActionPreference -WA 'Continue'
 'Whatif Running Get-LTServiceInfo | Install-LTService'; Get-LTServiceInfo -EA 0 -WA 0 | Install-LTService -EA $ErrorActionPreference -Force -WA 'Continue' -WhatIf
+'Whatif Running Get-LTServiceInfo | Install-LTService -Hide -Rename MyAutoAgent'; Get-LTServiceInfo -EA 0 -WA 0 | Install-LTService -Hide -Rename MyAutoAgent -EA $ErrorActionPreference -Force -WA 'Continue' -WhatIf
 
 'Whatif Running Hide-LTAddRemove'; Hide-LTAddRemove -WhatIf -EA $ErrorActionPreference -WA $WarningPreference
 'Whatif Running Show-LTAddRemove'; Show-LTAddRemove -WhatIf -EA $ErrorActionPreference -WA $WarningPreference
@@ -157,6 +159,45 @@ function Round3Tests {
     }
 }
 
+function Round4Tests {
+  'Running Round 4 Tests'
+  
+  $DebugPreference='Continue'
+  $InformationPreference='Continue'
+  $VerbosePreference='Continue'
+  $ErrorActionPreference='Continue'
+  $WarningPreference='Continue'
+  'Running Start-LTService'
+  try {Start-LTService}
+  catch {'Error running Start-LTService'; $($Error[0])}
+  
+  'Running $Global:BackupSettings | Reinstall-LTService -Rename MyAutoAgent -Hide'
+      $Global:BackupSettings | Reinstall-LTService -Rename MyAutoAgent -Hide -ErrorAction Stop
+  
+      'Reinstall Succeeded. Testing Uninstall/Reinstall individually.'
+      if (!($Global:BackupSettings)) {$Global:BackupSettings = Get-LTServiceInfo -ErrorAction Stop}
+    
+      Start-Sleep 10 
+      'Running Get-LTServiceInfo | Uninstall-LTService'
+      try { Get-LTServiceInfo | Uninstall-LTService }
+      catch {'Error running Get-LTServiceInfo | Uninstall-LTService'; $($Error[0])}
+}
+
+function Round5Tests {
+  'Running Round 5 Tests'
+
+  $DebugPreference='Continue'
+  $InformationPreference='Continue'
+  $VerbosePreference='Continue'
+  $ErrorActionPreference='Continue'
+  $WarningPreference='Continue'
+
+  Start-Sleep 10 
+  'Running $Global:BackupSettings | Install-LTService -Rename MyAutoAgent -Hide'
+  try { $Global:BackupSettings | Install-LTService -Rename MyAutoAgent -Hide }
+  catch {'Error running $Global:BackupSettings | Install-LTService -Rename MyAutoAgent -Hide'; $($Error[0])}
+
+}
 
 Import-Module $DestModulePath.FullName
 WhatIfTests
@@ -182,6 +223,18 @@ Import-Module $DestModulePath.FullName
 Round3Tests
 Remove-Module $DestModulePath.BaseName
 'Done with Round3 tests'
+Start-Sleep 5
+
+Import-Module $DestModulePath.FullName
+Round4Tests
+Remove-Module $DestModulePath.BaseName
+'Done with Round4 tests'
+Start-Sleep 5
+
+Import-Module $DestModulePath.FullName
+Round5Tests
+Remove-Module $DestModulePath.BaseName
+'Done with Round5 tests'
 Start-Sleep 5
 
 'Switching from Module Mode to IEX mode'
@@ -205,3 +258,13 @@ Start-Sleep 5
 (Get-Content $DestModulePath.FullName|Out-String)|iex;
 Round3Tests
 'Done with Round3 tests'
+
+(Get-Content $DestModulePath.FullName|Out-String)|iex;
+Round4Tests
+WhatIfTests
+'Done with Round4 tests'
+Start-Sleep 5
+
+(Get-Content $DestModulePath.FullName|Out-String)|iex;
+Round5Tests
+'Done with Round5 tests'
