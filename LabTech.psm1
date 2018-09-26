@@ -11,7 +11,7 @@
     Tested Versions: v10.5, v11, v12
 
 .NOTES
-    Version:        1.4
+    Version:        1.5
     Author:         Chris Taylor
     Website:        labtechconsulting.com
     Creation Date:  3/14/2016
@@ -26,13 +26,19 @@
     Update Date: 2/1/2018
     Purpose/Change: Updates for support of Proxy Settings. Enabled -WhatIf processing for many functions.
 
+    Update Date: 8/7/2018
+    Purpose/Change: Added support for TLS 1.2
+
+    Update Date: 8/28/2018
+    Purpose/Change: Added Update-LTService function
+
 #>
 
 if (-not ($PSVersionTable)) {Write-Warning 'PS1 Detected. PowerShell Version 2.0 or higher is required.';return}
 if (-not ($PSVersionTable) -or $PSVersionTable.PSVersion.Major -lt 3 ) {Write-Verbose 'PS2 Detected. PowerShell Version 3.0 or higher may be required for full functionality.'}
 
 #Module Version
-$ModuleVersion = "1.4"
+$ModuleVersion = "1.5"
 
 If ($env:PROCESSOR_ARCHITEW6432 -match '64' -and [IntPtr]::Size -ne 8) {
     Write-Warning '32-bit PowerShell session detected on 64-bit OS. Attempting to launch 64-Bit session to process commands.'
@@ -60,6 +66,10 @@ Add-Type -Debug:$False @"
     }
 "@
 [System.Net.ServicePointManager]::CertificatePolicy = New-Object TrustAllCertsPolicy
+#Enable TLS, TLS1.1, TLS1.2 in this session if they are available
+IF([Net.SecurityProtocolType]::Tls) {[Net.ServicePointManager]::SecurityProtocol=[Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls}
+IF([Net.SecurityProtocolType]::Tls11) {[Net.ServicePointManager]::SecurityProtocol=[Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls11}
+IF([Net.SecurityProtocolType]::Tls12) {[Net.ServicePointManager]::SecurityProtocol=[Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12}
 
 #region [Functions]-------------------------------------------------------------
 
@@ -70,7 +80,7 @@ Function Get-LTServiceInfo{
     This function will pull all of the registry data into an object.
 
 .NOTES
-    Version:        1.3
+    Version:        1.4
     Author:         Chris Taylor
     Website:        labtechconsulting.com
     Creation Date:  3/14/2016
@@ -84,6 +94,9 @@ Function Get-LTServiceInfo{
 
     Update Date: 3/12/2018
     Purpose/Change: Support for ShouldProcess to enable -Confirm and -WhatIf.
+
+    Update Date: 8/28/2018
+    Purpose/Change: Remove '~' from server addresses.
 
 .LINK
     http://labtechconsulting.com
@@ -118,7 +131,7 @@ Function Get-LTServiceInfo{
                 }
                 $key.BasePath = [System.Environment]::ExpandEnvironmentVariables($($key|Select-object -Expand BasePath -EA 0)) -replace '\\\\','\'
                 if (($key) -ne $Null -and ($key|Get-Member|Where-Object {$_.Name -match 'Server Address'})) {
-                    $Servers = ($Key|Select-Object -Expand 'Server Address' -EA 0).Split('|')|ForEach-Object {$_.Trim()}
+                    $Servers = ($Key|Select-Object -Expand 'Server Address' -EA 0).Split('|')|ForEach-Object {$_.Trim() -replace '~',''}
                     Add-Member -InputObject $key -MemberType NoteProperty -Name 'Server' -Value $Servers -Force
                 }#End If
             }#End Try
@@ -424,7 +437,7 @@ Function Start-LTService{
                             Write-Warning "There was an issue killing the following process: $proc"
                             Write-Warning "This generally means that a 'protected application' is using this port."
                             $newPort = [int]$port + 1
-                            if($newPort > 42009) {$newPort = 42000}
+                            if($newPort -gt 42009) {$newPort = 42000}
                             Write-Warning "Setting tray port to $newPort."
                             New-ItemProperty -Path "HKLM:\Software\Labtech\Service" -Name TrayPort -PropertyType String -Value $newPort -Force -WhatIf:$False -Confirm:$False | Out-Null
                         }#End Catch
@@ -761,7 +774,7 @@ Function Uninstall-LTService{
                         #Run MSI uninstaller for current installation
                         Write-Verbose "Launching MSI Uninstall."
                         Write-Debug "Executing Command ""msiexec.exe $($xarg)"""
-                        Start-Process -Wait -FilePath "$env:windir\system32\msiexec.exe" -ArgumentList $xarg
+                        Start-Process -Wait -FilePath "$env:windir\system32\msiexec.exe" -ArgumentList $xarg -WorkingDirectory $env:TEMP
                         Start-Sleep -Seconds 5
                     } Else {
                         Write-Verbose "WARNING: $($env:windir)\temp\LabTech\Installer\Agent_Install.msi was not found."
@@ -773,7 +786,7 @@ Function Uninstall-LTService{
                         #Run Agent_Uninstall.exe
                         Write-Verbose "Launching Agent Uninstaller"
                         Write-Debug "Executing Command ""$($env:windir)\temp\Agent_Uninstall.exe"""
-                        Start-Process -Wait -FilePath "$($env:windir)\temp\Agent_Uninstall.exe"
+                        Start-Process -Wait -FilePath "$($env:windir)\temp\Agent_Uninstall.exe" -WorkingDirectory $env:TEMP
                         Start-Sleep -Seconds 5
                     } Else {
                         Write-Verbose "WARNING: $($env:windir)\temp\Agent_Uninstall.exe was not found."
@@ -880,6 +893,9 @@ Function Install-LTService{
 
 .PARAMETER Hide
     This will call Hide-LTAddRemove after the install.
+    
+.PARAMETER SkipDotNet
+    This will disable the error checking for the .NET 3.5 and .NET 2.0 frameworks during the install process.
 
 .PARAMETER Force
     This will disable some of the error checking on the install process.
@@ -926,6 +942,10 @@ Function Install-LTService{
     Update Date: 3/13/2018
     Purpose/Change: Added -NoWait parameter.
     Added minimum size requirement for agent installer to detect and skip a bad file download.
+    
+    Update Date: 6/5/2018
+    Purpose/Change: Added -SkipDotNet parameter.
+    Allows for skipping of .NET 3.5 and 2.0 framework checks for installing on OS with .NET 4.0+ already installed
 
 .LINK
     http://labtechconsulting.com
@@ -948,6 +968,7 @@ Function Install-LTService{
         [AllowNull()]
         [string]$Rename,
         [switch]$Hide,
+        [switch]$SkipDotNet,
         [switch]$Force,
         [switch]$NoWait
     )
@@ -970,54 +991,57 @@ Function Install-LTService{
             Throw "Needs to be ran as Administrator" 
         }
 
-        $DotNET = Get-ChildItem 'HKLM:\SOFTWARE\Microsoft\NET Framework Setup\NDP' -recurse -EA 0 | Get-ItemProperty -name Version,Release -EA 0 | Where-Object { $_.PSChildName -match '^(?!S)\p{L}'} | Select-Object -ExpandProperty Version -EA 0
-        if (-not ($DotNet -like '3.5.*')){
-            Write-Output ".NET 3.5 installation needed."
-            #Install-WindowsFeature Net-Framework-Core
-            $OSVersion = [System.Environment]::OSVersion.Version
+        if (!$SkipDotNet){
 
-            if ([version]$OSVersion -gt [version]'6.2'){
-                try{
-                    If ( $PSCmdlet.ShouldProcess("NetFx3", "Enable-WindowsOptionalFeature") ) {
-                        $Install = Enable-WindowsOptionalFeature -Online -FeatureName "NetFx3" -All
-                        if ($Install.RestartNeeded) {
-                            Write-Output ".NET 3.5 installed but a reboot is needed."
+            $DotNET = Get-ChildItem 'HKLM:\SOFTWARE\Microsoft\NET Framework Setup\NDP' -recurse -EA 0 | Get-ItemProperty -name Version,Release -EA 0 | Where-Object { $_.PSChildName -match '^(?!S)\p{L}'} | Select-Object -ExpandProperty Version -EA 0
+            if (-not ($DotNet -like '3.5.*')){
+                Write-Output ".NET 3.5 installation needed."
+                #Install-WindowsFeature Net-Framework-Core
+                $OSVersion = [System.Environment]::OSVersion.Version
+
+                if ([version]$OSVersion -gt [version]'6.2'){
+                    try{
+                        If ( $PSCmdlet.ShouldProcess("NetFx3", "Enable-WindowsOptionalFeature") ) {
+                            $Install = Enable-WindowsOptionalFeature -Online -FeatureName "NetFx3" -All
+                            if ($Install.RestartNeeded) {
+                                Write-Output ".NET 3.5 installed but a reboot is needed."
+                            }
                         }
                     }
-                }
-                catch{
-                    Write-Error "ERROR: .NET 3.5 install failed." -ErrorAction Continue
-                    if (!($Force)) { Write-Error $Install -ErrorAction Stop }
-                }
-            }
-            Else{
-                If ( $PSCmdlet.ShouldProcess("NetFx3", "Add Windows Feature") ) {
-                    Try {$Result=& "$env:windir\system32\Dism.exe" /online /get-featureinfo /featurename:NetFx3 2>''} 
-                    Catch {Write-Output "Error calling Dism.exe."; $Result=$Null}
-                    If ($Result -contains "State : Enabled"){
-                        # also check reboot status, unsure of possible outputs
-                        # Restart Required : Possible 
-                        Write-Warning ".Net Framework 3.5 has been installed and enabled." 
-                    }
-                    Else { 
+                    catch{
                         Write-Error "ERROR: .NET 3.5 install failed." -ErrorAction Continue
-                        If (!($Force)) { Write-Error $Result -ErrorAction Stop }
+                        if (!($Force)) { Write-Error $Install -ErrorAction Stop }
+                    }
+                }
+                Else{
+                    If ( $PSCmdlet.ShouldProcess("NetFx3", "Add Windows Feature") ) {
+                        Try {$Result=& "$env:windir\system32\Dism.exe" /online /get-featureinfo /featurename:NetFx3 2>''} 
+                        Catch {Write-Output "Error calling Dism.exe."; $Result=$Null}
+                        If ($Result -contains "State : Enabled"){
+                            # also check reboot status, unsure of possible outputs
+                            # Restart Required : Possible 
+                            Write-Warning ".Net Framework 3.5 has been installed and enabled." 
+                        }
+                        Else { 
+                            Write-Error "ERROR: .NET 3.5 install failed." -ErrorAction Continue
+                            If (!($Force)) { Write-Error $Result -ErrorAction Stop }
+                        }#End If
                     }#End If
                 }#End If
+
+                $DotNET = Get-ChildItem 'HKLM:\SOFTWARE\Microsoft\NET Framework Setup\NDP' -recurse | Get-ItemProperty -name Version -EA 0 | Where-Object{ $_.PSChildName -match '^(?!S)\p{L}'} | Select-Object -ExpandProperty Version
             }#End If
 
-            $DotNET = Get-ChildItem 'HKLM:\SOFTWARE\Microsoft\NET Framework Setup\NDP' -recurse | Get-ItemProperty -name Version -EA 0 | Where-Object{ $_.PSChildName -match '^(?!S)\p{L}'} | Select-Object -ExpandProperty Version
-        }#End If
-
-        If (-not ($DotNet -like '3.5.*')){
-            If (($Force)) {
-                If ($DotNet -like '2.0.*'){
-                    Write-Error "ERROR: .NET 3.5 is not detected and could not be installed." -ErrorAction Continue
+            If (-not ($DotNet -like '3.5.*')){
+                If (($Force)) {
+                    If ($DotNet -like '2.0.*'){
+                        Write-Error "ERROR: .NET 3.5 is not detected and could not be installed." -ErrorAction Continue
+                    } Else {
+                        Write-Error "ERROR: .NET 2.0 is not detected and could not be installed." -ErrorAction Stop
+                    }#End If
                 } Else {
-                    Write-Error "ERROR: .NET 2.0 is not detected and could not be installed." -ErrorAction Stop
+                    Write-Error "ERROR: .NET 3.5 is not detected and could not be installed." -ErrorAction Stop            
                 }#End If
-            } Else {
-                Write-Error "ERROR: .NET 3.5 is not detected and could not be installed." -ErrorAction Stop            
             }#End If
         }#End If
 
@@ -1168,7 +1192,7 @@ Function Install-LTService{
                         $svcRun = ('LTService') | Get-Service -EA 0 | Measure-Object | Select-Object -Expand Count
                         If ($svcRun -eq 0) {
                             Write-Verbose "Launching Installation Process: msiexec.exe $(($iarg))"
-                            Start-Process -Wait -FilePath "$env:windir\system32\msiexec.exe" -ArgumentList $iarg
+                            Start-Process -Wait -FilePath "$env:windir\system32\msiexec.exe" -ArgumentList $iarg -WorkingDirectory $env:TEMP
                             Start-Sleep 5
                         }
                         $svcRun = ('LTService') | Get-Service -EA 0 | Measure-Object | Select-Object -Expand Count
@@ -1459,6 +1483,249 @@ Function Redo-LTService{
 }#End Function Redo-LTService
 #endregion Redo-LTService
 Set-Alias -Name ReInstall-LTService -Value Redo-LTService
+
+Function Update-LTService{
+    #region [Update-LTService]---------------------------------------------------
+    <#
+    .SYNOPSIS
+        This function will manually update the LabTech agent to the requested version.
+
+    .DESCRIPTION
+        This script will attempt to pull current server settings from machine, then download and run the agent updater.
+
+
+    .PARAMETER Version
+        This is the agent version to install. 
+        Example: 120.240
+        This is needed to download the update file. If omitted, the version advertised by the server will be used.
+
+    .EXAMPLE
+        Update-LTService -Version 120.240
+        This will update the Automate agent to the specific version requested, using the server address in the registry.
+
+    .EXAMPLE
+        Update-LTService
+        This will update the Automate agent to the current version advertised, using the server address in the registry.
+
+    .NOTES
+        Version:        1.0
+        Author:         Darren White
+        Creation Date:  8/28/2018
+        Purpose/Change: Initial function development
+
+    .LINK
+        http://labtechconsulting.com
+    #> 
+        [CmdletBinding(SupportsShouldProcess=$True)]
+        Param(
+            [parameter(Position=0)]
+            [AllowNull()]
+            [string]$Version
+        )
+
+        Begin{
+            Set-Alias -name LINENUM -value Get-CurrentLineNumber -WhatIf:$False -Confirm:$False
+            Write-Debug "Starting $($myInvocation.InvocationName) at line $(LINENUM)"
+            Clear-Variable Svr, GoodServer, Settings -EA 0 -WhatIf:$False -Confirm:$False #Clearing Variables for use
+            $Settings = Get-LTServiceInfo -EA 0 -Verbose:$False -WhatIf:$False -Confirm:$False
+            $updaterPath = [System.Environment]::ExpandEnvironmentVariables("%windir%\temp\_LTUpdate")
+            $xarg=@("/o""$updaterPath""","/y")
+            $uarg=@("""$updaterPath\Update.ini""")
+        }#End Begin
+
+        Process{
+            if (-not ($Server)){
+                If ($Settings){
+                  $Server = $Settings|Select-object -Expand 'Server' -EA 0
+                }
+            }
+
+            Foreach ($Svr in $Server) {
+                If (-not ($GoodServer)) {
+                    If ($Svr -match '^(https?://)?(([12]?[0-9]{1,2}\.){3}[12]?[0-9]{1,2}|[a-z0-9][a-z0-9_-]*(\.[a-z0-9][a-z0-9_-]*){1,})$') {
+                        If ($Svr -notmatch 'https?://.+') {$Svr = "http://$($Svr)"}
+                        Try {
+                            $SvrVerCheck = "$($Svr)/Labtech/Agent.aspx"
+                            Write-Debug "Testing Server Response and Version: $SvrVerCheck"
+                            $SvrVer = $Script:LTServiceNetWebClient.DownloadString($SvrVerCheck)
+                            Write-Debug "Raw Response: $SvrVer"
+                            $SVer = $SvrVer|select-string -pattern '(?<=[|]{6})[0-9]{1,3}\.[0-9]{1,3}'|ForEach-Object {$_.matches}|Select-Object -Expand value -EA 0
+                            If (($SVer) -eq $Null) {
+                                Write-Verbose "Unable to test version response from $($Svr)."
+                                Continue
+                            }
+                            If ($Version -match '[1-9][0-9]{2}\.[0-9]{3}') {
+                                $updater = "$($Svr)/Labtech/Updates/LabtechUpdate_$($Version).zip"
+                            } ElseIf ([System.Version]$SVer -ge [System.Version]'105.001') {
+                                $Version = $SVer
+                                Write-Verbose "Using detected version ($Version) from server: $($Svr)."
+                                $updater = "$($Svr)/Labtech/Updates/LabtechUpdate_$($Version).zip"
+                            }
+
+                            #Kill all running processes from $updaterPath
+                            if (Test-Path $updaterPath){
+                                $Executables = (Get-ChildItem $updaterPath -Filter *.exe -Recurse -ErrorAction SilentlyContinue|Select-Object -Expand FullName)
+                                if ($Executables) {
+                                    Write-Verbose "Terminating LabTech Processes from $($updaterPath) if found running: $(($Executables) -replace [Regex]::Escape($updaterPath),'' -replace '^\\','')"
+                                    Get-Process | Where-Object {$Executables -contains $_.Path } | ForEach-Object {
+                                        Write-Debug "Terminating Process $($_.ProcessName)"
+                                        $($_) | Stop-Process -Force -ErrorAction SilentlyContinue
+                                    }
+                                }
+                            }#End If
+
+                            #Remove $updaterPath - Depth First Removal, First by purging files, then Removing Folders, to get as much removed as possible if complete removal fails
+                            @("$updaterPath") | foreach-object {
+                                If ((Test-Path "$($_)" -EA 0)) {
+                                    If ( $PSCmdlet.ShouldProcess("$($_)","Remove Folder") ) {
+                                        Write-Debug "Removing Folder: $($_)"
+                                        Try {
+                                            Get-ChildItem -Path $_ -Recurse -Force -ErrorAction SilentlyContinue | Where-Object { ($_.psiscontainer) } | foreach-object { Get-ChildItem -Path "$($_.FullName)" -EA 0 | Where-Object { -not ($_.psiscontainer) } | Remove-Item -Force -ErrorAction SilentlyContinue -Confirm:$False -WhatIf:$False }
+                                            Get-ChildItem -Path $_ -Recurse -Force -ErrorAction SilentlyContinue | Where-Object { ($_.psiscontainer) } | Sort-Object { $_.fullname.length } -Descending | Remove-Item -Force -ErrorAction SilentlyContinue -Recurse -Confirm:$False -WhatIf:$False
+                                            Remove-Item -Recurse -Force -Path $_ -ErrorAction SilentlyContinue -Confirm:$False -WhatIf:$False
+                                        } Catch {}
+                                    }#End If
+                                }#End If
+                            }#End Foreach-Object
+            
+                            Try {
+                                If (-not (Test-Path -PathType Container -Path "$updaterPath" )){
+                                    New-Item "$updaterPath" -type directory -ErrorAction SilentlyContinue | Out-Null
+                                }#End if
+                                $updaterTest = [System.Net.WebRequest]::Create($updater)
+                                If (($Script:LTProxy.Enabled) -eq $True) {
+                                    Write-Debug "Proxy Configuration Needed. Applying Proxy Settings to request."
+                                    $updaterTest.Proxy=$Script:LTWebProxy
+                                }#End If                        
+                                $updaterTest.KeepAlive=$False
+                                $updaterTest.ProtocolVersion = '1.0'
+                                $updaterResult = $updaterTest.GetResponse()
+                                $updaterTest.Abort()
+                                If ($updaterResult.StatusCode -ne 200) {
+                                    Write-Warning "Line $(LINENUM): Unable to download LabtechUpdate.exe version $Version from server $($Svr)."
+                                    Continue
+                                } Else {
+                                    If ( $PSCmdlet.ShouldProcess($updater, "DownloadFile") ) {
+                                        Write-Debug "Downloading LabtechUpdate.exe from $updater"
+                                        $Script:LTServiceNetWebClient.DownloadFile($updater,"$updaterPath\LabtechUpdate.exe")
+                                        If((Test-Path "$updaterPath\LabtechUpdate.exe") -and  !((Get-Item "$updaterPath\LabtechUpdate.exe" -EA 0).length/1KB -gt 1234)) {
+                                            Write-Warning "Line $(LINENUM): LabtechUpdate.exe size is below normal. Removing suspected corrupt file."
+                                            Remove-Item "$updaterPath\LabtechUpdate.exe" -ErrorAction SilentlyContinue -Force -Confirm:$False
+                                            Continue
+                                        }#End If
+                                    }#End If
+        
+                                    If ($WhatIfPreference -eq $True) {
+                                        $GoodServer = $Svr
+                                    } ElseIf (Test-Path "$updaterPath\LabtechUpdate.exe") {
+                                        $GoodServer = $Svr
+                                        Write-Verbose "LabtechUpdate.exe downloaded successfully from server $($Svr)."
+                                    } Else {
+                                        Write-Warning "Line $(LINENUM): Error encountered downloading from $($Svr). No update file was received."
+                                        Continue
+                                    }#End If
+                                }#End If
+                            }#End Try
+                            Catch {
+                                Write-Warning "Line $(LINENUM): Error encountered downloading $updater."
+                                Continue
+                            }
+                        }#End Try
+                        Catch {
+                            Write-Warning "Line $(LINENUM): Error encountered downloading from $($Svr)."
+                            Continue
+                        }
+                    } Else {
+                        Write-Warning "Line $(LINENUM): Server address $($Svr) is not formatted correctly. Example: https://lt.domain.com"
+                    }
+                } Else {
+                    Write-Debug "Server $($GoodServer) has been selected."
+                    Write-Verbose "Server has already been selected - Skipping $($Svr)."
+                }
+            }#End Foreach
+        }#End Process
+
+        End{
+            $detectedVersion = $Settings|Select-object -Expand 'Version' -EA 0
+            If ($Null -eq $detectedVersion){
+                Write-Error "ERROR: Line $(LINENUM): No existing installation was found." -ErrorAction Stop
+                Return
+            }
+            If ([System.Version]$detectedVersion -ge [System.Version]$Version) {
+                Write-Warning "Line $(LINENUM): Installed version detected ($detectedVersion) is higher than or equal to the requested version ($Version)."
+                Return
+            }
+            If (-not ($GoodServer)) {
+                Write-Warning "Line $(LINENUM): No valid server was detected."
+                Return
+            }
+            If ([System.Version]$SVer -gt [System.Version]$Version) {
+                Write-Warning "Line $(LINENUM): Server version detected ($SVer) is higher than the requested version ($Version)."
+                Return
+            }
+
+            Try{
+                Stop-LTService
+            }#End Try
+            Catch{
+                Write-Error "ERROR: Line $(LINENUM): There was an error stopping the services. $($Error[0])"
+                return
+            }#End Catch
+    
+            Write-Output "Updating Agent with the following information: Server $($GoodServer), Version $Version"
+            Try{
+                If ($PSCmdlet.ShouldProcess("LabtechUpdate.exe $($xarg)", "Extracting update files")) {
+                    If ((Test-Path "$updaterPath\LabtechUpdate.exe")) {
+                        #Extract Update Files
+                        Write-Verbose "Launching LabtechUpdate Self-Extractor."
+                        Write-Debug "Executing Command ""LabtechUpdate.exe $($xarg)"""
+                        Try {
+                            Push-Location $updaterPath
+                            & "$updaterPath\LabtechUpdate.exe" $($xarg) 2>''
+                            Pop-Location
+                        } 
+                        Catch {Write-Output "Error calling LabtechUpdate.exe."}
+                        Start-Sleep -Seconds 5
+                    } Else {
+                        Write-Verbose "WARNING: $updaterPath\LabtechUpdate.exe was not found."
+                    }
+                }#End If
+
+                If ($PSCmdlet.ShouldProcess("Update.exe $($uarg)", "Launching Updater")) {
+                    If ((Test-Path "$updaterPath\Update.exe")) {
+                        #Extract Update Files
+                        Write-Verbose "Launching Labtech Updater"
+                        Write-Debug "Executing Command ""Update.exe $($uarg)"""
+                        Try {& "$updaterPath\Update.exe" $($uarg) 2>''} 
+                        Catch {Write-Output "Error calling Update.exe."}
+                        Start-Sleep -Seconds 5
+                    } Else {
+                        Write-Verbose "WARNING: $updaterPath\Update.exe was not found."
+                    }
+                }#End If
+
+            }#End Try
+    
+            Catch{
+                Write-Error "ERROR: Line $(LINENUM): There was an error during the update process $($Error[0])" -ErrorAction Continue
+            }#End Catch
+    
+            Try{
+                Start-LTService
+            }#End Try
+            Catch{
+                Write-Error "ERROR: Line $(LINENUM): There was an error starting the services. $($Error[0])"
+                return
+            }#End Catch
+
+            If ($WhatIfPreference -ne $True) {
+                If ($?) {}
+                Else {$Error[0]}
+            }#End If
+            Write-Debug "Exiting $($myInvocation.InvocationName) at line $(LINENUM)"
+        }#End End
+    }#End Function Update-LTService
+    #endregion Update-LTService
 
 Function Get-LTError{
 #region [Get-LTError]-----------------------------------------------------------
@@ -3211,6 +3478,12 @@ Function Get-LTProxy{
 }#End Function Get-LTProxy
 #endregion Get-LTProxy
 
+Function Get-CurrentLineNumber {
+#region [Get-CurrentLineNumber]--------------------------------------------
+    $MyInvocation.ScriptLineNumber
+}
+#endregion Get-CurrentLineNumber
+
 Function Initialize-LTServiceModule{
 #region [Initialize-LTServiceModule]--------------------------------------------
 <#
@@ -3289,6 +3562,7 @@ Start-LTService
 Stop-LTService
 Test-LTPorts
 Uninstall-LTService
+Update-LTService
 "@) -replace "[`r`n,\s]+",',') -split ',')
 
 $PublicAlias=@(((@"
