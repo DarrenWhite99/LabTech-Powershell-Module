@@ -11,7 +11,7 @@
     Tested Versions: v10.5, v11, v12, v2019
 
 .NOTES
-    Version:        1.8
+    Version:        1.9.0
     Author:         Chris Taylor
     Website:        labtechconsulting.com
     Creation Date:  3/14/2016
@@ -21,7 +21,7 @@
     Purpose/Change: Updates for better overall compatibility, including better support for PowerShell V2
 
     Update Date: 1/23/2018
-    Purpose/Change: Updates to address 32-bit vs. 64-bit operations.
+    Purpose/Change: Updates to address 32-bit vs. 64-bit environments
 
     Update Date: 2/1/2018
     Purpose/Change: Updates for support of Proxy Settings. Enabled -WhatIf processing for many functions.
@@ -34,60 +34,72 @@
 
     Update Date: 2/26/2019
     Purpose/Change: Update to support 32-bit execution in 64-bit OS without SYSNATIVE redirection
+
+    Update Date: 9/9/2020
+    Purpose/Change: Update to support 64-bit OS without SYSNATIVE redirection (ARM64)
 #>
 
-if (-not ($PSVersionTable)) {Write-Warning 'PS1 Detected. PowerShell Version 2.0 or higher is required.';return}
-if (-not ($PSVersionTable) -or $PSVersionTable.PSVersion.Major -lt 3 ) {Write-Verbose 'PS2 Detected. PowerShell Version 3.0 or higher may be required for full functionality.'}
+If (-not ($PSVersionTable)) {Write-Warning 'PS1 Detected. PowerShell Version 2.0 or higher is required.';return}
+ElseIf ($PSVersionTable.PSVersion.Major -lt 3 ) {Write-Verbose 'PS2 Detected. PowerShell Version 3.0 or higher may be required for full functionality.'}
 
 #Module Version
-$ModuleVersion = "1.8"
+$ModuleVersion = "1.9.0"
 $ModuleGuid='f1f06c84-00c8-11ea-b6e8-000c29aaa7df'
 
-If ($env:PROCESSOR_ARCHITEW6432 -match '64' -and [IntPtr]::Size -ne 8) {
+If ($env:PROCESSOR_ARCHITEW6432 -match '64' -and [IntPtr]::Size -ne 8 -and $env:PROCESSOR_ARCHITEW6432 -ne 'ARM64') {
     Write-Warning '32-bit PowerShell session detected on 64-bit OS. Attempting to launch 64-Bit session to process commands.'
-    $pshell="${env:WINDIR}\sysnative\windowspowershell\v1.0\powershell.exe"
+    $pshell="${env:windir}\SysNative\WindowsPowershell\v1.0\powershell.exe"
     If (!(Test-Path -Path $pshell)) {
-        Write-Warning 'SYSNATIVE PATH REDIRECTION IS NOT AVAILABLE. Attempting to access 64-bit PowerShell directly.'
-        $pshell="${env:WINDIR}\System32\WindowsPowershell\v1.0\powershell.exe"
-        $FSRedirection=$True
-        Add-Type -Debug:$False -Name Wow64 -Namespace "Kernel32" -MemberDefinition @"
+        $pshell="${env:windir}\System32\WindowsPowershell\v1.0\powershell.exe"
+        If ($Null -eq ([System.Management.Automation.PSTypeName]'Kernel32.Wow64').Type -or $Null -eq [Kernel32.Wow64].GetMethod('Wow64DisableWow64FsRedirection')) {
+            Write-Debug 'Loading WOW64Redirection functions'
+
+            Add-Type -Name Wow64 -Namespace Kernel32 -Debug:$False -MemberDefinition @"
 [DllImport("kernel32.dll", SetLastError=true)]
 public static extern bool Wow64DisableWow64FsRedirection(ref IntPtr ptr);
 
 [DllImport("kernel32.dll", SetLastError=true)]
 public static extern bool Wow64RevertWow64FsRedirection(ref IntPtr ptr);
 "@
+        }
+        Write-Verbose 'System32 path is redirected. Disabling redirection.'
         [ref]$ptr = New-Object System.IntPtr
-        $Result = [Kernel32.Wow64]::Wow64DisableWow64FsRedirection($ptr) # Now you can call 64-bit Powershell from system32
-    }
+        $Result = [Kernel32.Wow64]::Wow64DisableWow64FsRedirection($ptr)
+        $FSRedirectionDisabled=$True
+    }#End If
+
     If ($myInvocation.Line) {
         &"$pshell" -NonInteractive -NoProfile $myInvocation.Line
     } Elseif ($myInvocation.InvocationName) {
         &"$pshell" -NonInteractive -NoProfile -File "$($myInvocation.InvocationName)" $args
     } Else {
         &"$pshell" -NonInteractive -NoProfile $myInvocation.MyCommand
-    }
+    }#End If
     $ExitResult=$LASTEXITCODE
-    If ($FSRedirection -eq $True) {
+
+    If ($Null -ne ([System.Management.Automation.PSTypeName]'Kernel32.Wow64').Type -and $Null -ne [Kernel32.Wow64].GetMethod('Wow64DisableWow64FsRedirection') -and $FSRedirectionDisabled -eq $True) {
         [ref]$defaultptr = New-Object System.IntPtr
         $Result = [Kernel32.Wow64]::Wow64RevertWow64FsRedirection($defaultptr)
-    }
+        Write-Verbose 'System32 path redirection has been re-enabled.'
+    }#End If
     Write-Warning 'Exiting 64-bit session. Module will only remain loaded in native 64-bit PowerShell environment.'
-Exit $ExitResult
+    Exit $ExitResult
 }#End If
 
 #Ignore SSL errors
-Add-Type -Debug:$False @"
-    using System.Net;
-    using System.Security.Cryptography.X509Certificates;
-    public class TrustAllCertsPolicy : ICertificatePolicy {
-        public bool CheckValidationResult(
-            ServicePoint srvPoint, X509Certificate certificate,
-            WebRequest request, int certificateProblem) {
-            return true;
+If ($Null -eq ([System.Management.Automation.PSTypeName]'TrustAllCertsPolicy').Type) {
+    Add-Type -Debug:$False @"
+        using System.Net;
+        using System.Security.Cryptography.X509Certificates;
+        public class TrustAllCertsPolicy : ICertificatePolicy {
+            public bool CheckValidationResult(
+                ServicePoint srvPoint, X509Certificate certificate,
+                WebRequest request, int certificateProblem) {
+                return true;
+            }
         }
-    }
 "@
+}
 [System.Net.ServicePointManager]::CertificatePolicy = New-Object TrustAllCertsPolicy
 #Enable TLS, TLS1.1, TLS1.2, TLS1.3 in this session if they are available
 IF([Net.SecurityProtocolType]::Tls) {[Net.ServicePointManager]::SecurityProtocol=[Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls}
@@ -346,7 +358,7 @@ Function Stop-LTService{
             Write-Verbose "Stopping Labtech Services"
             Try{
                 ('LTService','LTSvcMon') | Foreach-Object {
-                    Try {$Null=& "$env:windir\system32\sc.exe" stop "$($_)" 2>''}
+                    Try {$Null=& "${env:windir}\system32\sc.exe" stop "$($_)" 2>''}
                     Catch {Write-Output "Error calling sc.exe."}
                 }
                 $timeout = new-timespan -Minutes 1
@@ -445,7 +457,7 @@ Function Start-LTService{
         }#End If
         Try{
             If((('LTService') | Get-Service -EA 0 | Where-Object {$_.Status -eq 'Stopped'} | Measure-Object | Select-Object -Expand Count) -gt 0) {
-                Try {$netstat=& "$env:windir\system32\netstat.exe" -a -o -n 2>'' | Select-String -Pattern " .*[0-9\.]+:$($Port).*[0-9\.]+:[0-9]+ .*?([0-9]+)" -EA 0}
+                Try {$netstat=& "${env:windir}\system32\netstat.exe" -a -o -n 2>'' | Select-String -Pattern " .*[0-9\.]+:$($Port).*[0-9\.]+:[0-9]+ .*?([0-9]+)" -EA 0}
                 Catch {Write-Output "Error calling netstat.exe."; $netstat=$null}
                 Foreach ($line in $netstat){
                     $processes += ($line -split ' {4,}')[-1]
@@ -470,7 +482,7 @@ Function Start-LTService{
                 @('LTService','LTSvcMon') | ForEach-Object {
                     If (Get-Service $_ -EA 0) {
                         Set-Service $_ -StartupType Automatic -EA 0 -Confirm:$False -WhatIf:$False
-                        $Null=& "$env:windir\system32\sc.exe" start "$($_)" 2>''
+                        $Null=& "${env:windir}\system32\sc.exe" start "$($_)" 2>''
                         $startedSvcCount++
                         Write-Debug "Line $(LINENUM): Executed Start Service for $($_)"
                     }#End If
@@ -626,7 +638,7 @@ Function Uninstall-LTService{
 
         $BasePath = $(Get-LTServiceInfo -EA 0 -Verbose:$False -WhatIf:$False -Confirm:$False -Debug:$False|Select-Object -Expand BasePath -EA 0)
         If (-not ($BasePath)) {$BasePath = "${env:windir}\LTSVC"}
-        $UninstallBase="${env:WINDIR}\Temp"
+        $UninstallBase="${env:windir}\Temp"
         $UninstallEXE='Agent_Uninstall.exe'
         $UninstallMSI='RemoteAgent.msi'
 
@@ -816,7 +828,7 @@ Function Uninstall-LTService{
                     If ($PSCmdlet.ShouldProcess("$($BasePath)\wodVPN.dll", "Unregister DLL")) {
                         #Unregister DLL
                         Write-Debug "Line $(LINENUM): Executing Command ""regsvr32.exe /u $($BasePath)\wodVPN.dll /s"""
-                        Try {& "$env:windir\system32\regsvr32.exe" /u "$($BasePath)\wodVPN.dll" /s 2>''}
+                        Try {& "${env:windir}\system32\regsvr32.exe" /u "$($BasePath)\wodVPN.dll" /s 2>''}
                         Catch {Write-Output "Error calling regsvr32.exe."}
                     }#End If
                 }#End If
@@ -851,7 +863,7 @@ Function Uninstall-LTService{
                     If (Get-Service $_ -EA 0) {
                         If ( $PSCmdlet.ShouldProcess("$($_)","Remove Service") ) {
                             Write-Debug "Line $(LINENUM): Removing Service: $($_)"
-                            Try {& "$env:windir\system32\sc.exe" delete "$($_)" 2>''}
+                            Try {& "${env:windir}\system32\sc.exe" delete "$($_)" 2>''}
                             Catch {Write-Output "Error calling sc.exe."}
                         }#End If
                     }#End If
@@ -859,7 +871,7 @@ Function Uninstall-LTService{
 
                 Write-Verbose "Cleaning Files remaining if found."
                 #Remove %ltsvcdir% - Depth First Removal, First by purging files, then Removing Folders, to get as much removed as possible if complete removal fails
-                @($BasePath, "$($env:windir)\temp\_ltupdate", "$($env:windir)\temp\_ltupdate") | foreach-object {
+                @($BasePath, "${env:windir}\temp\_ltupdate", "${env:windir}\temp\_ltupdate") | foreach-object {
                     If ((Test-Path "$($_)" -EA 0)) {
                         If ( $PSCmdlet.ShouldProcess("$($_)","Remove Folder") ) {
                             Write-Debug "Line $(LINENUM): Removing Folder: $($_)"
@@ -894,10 +906,10 @@ Function Uninstall-LTService{
             If ($WhatIfPreference -ne $True) {
                 If ($?){
                     #Post Uninstall Check
-                    If((Test-Path "$env:windir\ltsvc") -or (Test-Path "$env:windir\temp\_ltupdate") -or (Test-Path registry::HKLM\Software\LabTech\Service) -or (Test-Path registry::HKLM\Software\WOW6432Node\Labtech\Service)){
+                    If((Test-Path "${env:windir}\ltsvc") -or (Test-Path "${env:windir}\temp\_ltupdate") -or (Test-Path registry::HKLM\Software\LabTech\Service) -or (Test-Path registry::HKLM\Software\WOW6432Node\Labtech\Service)){
                         Start-Sleep -Seconds 10
                     }#End If
-                    If((Test-Path "$env:windir\ltsvc") -or (Test-Path "$env:windir\temp\_ltupdate") -or (Test-Path registry::HKLM\Software\LabTech\Service) -or (Test-Path registry::HKLM\Software\WOW6432Node\Labtech\Service)){
+                    If((Test-Path "${env:windir}\ltsvc") -or (Test-Path "${env:windir}\temp\_ltupdate") -or (Test-Path registry::HKLM\Software\LabTech\Service) -or (Test-Path registry::HKLM\Software\WOW6432Node\Labtech\Service)){
                         Write-Error "ERROR: Line $(LINENUM): Remnants of previous install still detected after uninstall attempt. Please reboot and try again."
                     } Else {
                         Write-Output "LabTech has been successfully uninstalled."
@@ -1134,7 +1146,7 @@ Function Install-LTService{
             }#End If
         }#End If
 
-        $InstallBase="${env:WINDIR}\Temp\LabTech"
+        $InstallBase="${env:windir}\Temp\LabTech"
         $InstallMSI='Agent_Install.msi'
         $logfile = "LTAgentInstall"
         $curlog = "$($InstallBase)\$($logfile).log"
@@ -1188,7 +1200,7 @@ Function Install-LTService{
 
                             # Vuln test June 10, 2020: ConnectWise Automate API Vulnerability - Only test if version is below known minimum.
                             Try{
-                                If ([System.Version]$SVer -lt [System.Version]'200.197') { 
+                                If ([System.Version]$SVer -lt [System.Version]'200.197' -or !$ServerPassword) { 
                                     $HTTP_Request = [System.Net.WebRequest]::Create("$($Svr)/LabTech/Deployment.aspx")
                                     If ($HTTP_Request.GetResponse().StatusCode -eq 'OK') {
                                         $Message = @('Your server is vulnerable!!')
@@ -1199,8 +1211,8 @@ Function Install-LTService{
                             }
                             Catch {
                                 If (!$ServerPassword) {
-                                    Write-Error 'ServerPassword needed.'
-                                    Break
+                                    Write-Error 'Anonymous downloads are not allowed. ServerPassword or InstallerToken may be needed.'
+                                    Continue
                                 }
                             }
                             If ($ServerPassword) { $installer = "$($Svr)/LabTech/Service/LabTechRemoteAgent.msi" }
@@ -1301,7 +1313,7 @@ Function Install-LTService{
                         $svcRun = ('LTService') | Get-Service -EA 0 | Measure-Object | Select-Object -Expand Count
                         If ($svcRun -eq 0) {
                             Write-Verbose "Launching Installation Process: msiexec.exe $(($iarg -join ''))"
-                            Start-Process -Wait -FilePath "${env:windir}\system32\msiexec.exe" -ArgumentList $iarg -WorkingDirectory ${env:TEMP}
+                            Start-Process -Wait -FilePath "${env:windir}\system32\msiexec.exe" -ArgumentList $iarg -WorkingDirectory $env:TEMP
                             Start-Sleep 5
                         }
                         $svcRun = ('LTService') | Get-Service -EA 0 | Measure-Object | Select-Object -Expand Count
@@ -1904,7 +1916,7 @@ Function Get-LTErrors{
     Begin{
         Write-Debug "Starting $($myInvocation.InvocationName) at line $(LINENUM)"
         $BasePath = $(Get-LTServiceInfo -EA 0 -Verbose:$False -WhatIf:$False -Confirm:$False -Debug:$False|Select-Object -Expand BasePath -EA 0)
-        if (!$BasePath){$BasePath = "$env:windir\LTSVC"}
+        if (!$BasePath){$BasePath = "${env:windir}\LTSVC"}
     }#End Begin
 
     Process{
@@ -2429,7 +2441,7 @@ Function Test-LTPorts{
 
             [array]$processes = @()
             #Get all processes that are using LTTrayPort (Default 42000)
-            Try {$netstat=& "$env:windir\system32\netstat.exe" -a -o -n | Select-String -Pattern " .*[0-9\.]+:$($TrayPort).*[0-9\.]+:[0-9]+ .*?([0-9]+)" -EA 0}
+            Try {$netstat=& "${env:windir}\system32\netstat.exe" -a -o -n | Select-String -Pattern " .*[0-9\.]+:$($TrayPort).*[0-9\.]+:[0-9]+ .*?([0-9]+)" -EA 0}
             Catch {Write-Output "Error calling netstat.exe."; $netstat=$null}
             Foreach ($line In $netstat){
                 $processes += ($line -split ' {4,}')[-1]
@@ -2634,7 +2646,7 @@ Function Get-LTProbeErrors{
     Begin{
         Write-Debug "Starting $($myInvocation.InvocationName) at line $(LINENUM)"
         $BasePath = $(Get-LTServiceInfo -EA 0 -Verbose:$False -WhatIf:$False -Confirm:$False -Debug:$False|Select-Object -Expand BasePath -EA 0)
-        if (!($BasePath)){$BasePath = "$env:windir\LTSVC"}
+        if (!($BasePath)){$BasePath = "${env:windir}\LTSVC"}
     }#End Begin
 
     Process{
@@ -2735,14 +2747,14 @@ Function New-LTServiceBackup{
 
         Try{
             Write-Debug "Line $(LINENUM): Exporting Registry Data"
-            $Null = & "$env:windir\system32\reg.exe" export "$Keys" "$RegPath" /y 2>''
+            $Null = & "${env:windir}\system32\reg.exe" export "$Keys" "$RegPath" /y 2>''
             Write-Debug "Line $(LINENUM): Loading and modifying registry key name"
             $Reg = Get-Content $RegPath
             $Reg = $Reg -replace [Regex]::Escape('[HKEY_LOCAL_MACHINE\SOFTWARE\LabTech'),'[HKEY_LOCAL_MACHINE\SOFTWARE\LabTechBackup'
             Write-Debug "Line $(LINENUM): Writing output information"
             $Reg | Out-File $RegPath
             Write-Debug "Line $(LINENUM): Importing Registry data to Backup Path"
-            $Null = & "$env:windir\system32\reg.exe" import "$RegPath" 2>''
+            $Null = & "${env:windir}\system32\reg.exe" import "$RegPath" 2>''
             $True | Out-Null #Protection to prevent exit status error
         }#End Try
 
@@ -3014,7 +3026,7 @@ Function Invoke-LTServiceCommand {
                     If ($Null -ne $CommandID) {
                         Write-Debug "Line $(LINENUM): Sending service command '$($Cmd)' ($($CommandID)) to 'LTService'"
                         Try {
-                            $Null=& "$env:windir\system32\sc.exe" control LTService $($CommandID) 2>''
+                            $Null=& "${env:windir}\system32\sc.exe" control LTService $($CommandID) 2>''
                             Write-Output "Sent Command '$($Cmd)' to 'LTService'"
                         }
                         Catch {
@@ -3216,7 +3228,7 @@ Function ConvertTo-LTSecurity{
 
     Update Date: 6/23/2020
     Purpose/Change: Improved pipeline and parameter handling
-    
+
 .LINK
     http://labtechconsulting.com
 #>
