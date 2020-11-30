@@ -1,4 +1,8 @@
-﻿# LabTech-Powershell-Module
+# BRANCH HAS BEEN ABANDONED
+**I am leaving this branch because of the lessons learned in escaping the WOW6432 environment under ARM64. Since the Automate agent is not compiled for ARM64 it operates in the x86 WOW environment and so this module works correctly in the WOW context as well.  If the Automate agent is ever supported under ARM64, the approach taken in this branch to expose the native 64bit ARM environment may be necessary.**
+
+
+# LabTech-Powershell-Module
 This is an attempt to create a comprehensive LT PoSH module. 
 To import this module in your scripts you can run:
 ```
